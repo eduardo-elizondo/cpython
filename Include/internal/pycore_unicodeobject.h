@@ -34,7 +34,6 @@ extern "C" {
 #define Py_UNICODE_ISDIGIT(ch) _PyUnicode_IsDigit(ch)
 #define Py_UNICODE_ISLOWER(ch) _PyUnicode_IsLowercase(ch)
 #define Py_UNICODE_ISNUMERIC(ch) _PyUnicode_IsNumeric(ch)
-#define Py_UNICODE_ISPRINTABLE(ch) _PyUnicode_IsPrintable(ch)
 #define Py_UNICODE_TOLOWER(ch) _PyUnicode_ToLowercase(ch)
 #define Py_UNICODE_TOUPPER(ch) _PyUnicode_ToUppercase(ch)
 #define Py_UNICODE_TOTITLE(ch) _PyUnicode_ToTitlecase(ch)
@@ -44,7 +43,6 @@ PyAPI_FUNC(int) _PyUnicode_IsDecimalDigit(Py_UCS4 ch/* Unicode character */);
 PyAPI_FUNC(int) _PyUnicode_IsDigit(Py_UCS4 ch/* Unicode character */);
 PyAPI_FUNC(int) _PyUnicode_IsLowercase(Py_UCS4 ch /* Unicode character */);
 PyAPI_FUNC(int) _PyUnicode_IsNumeric(Py_UCS4 ch /* Unicode character */);
-PyAPI_FUNC(int) _PyUnicode_IsPrintable(Py_UCS4 ch /* Unicode character */);
 PyAPI_FUNC(Py_UCS4) _PyUnicode_ToLowercase(
     Py_UCS4 ch       /* Unicode character */
     ) /* Py_DEPRECATED(3.3) */;
@@ -58,4 +56,4 @@ PyAPI_FUNC(Py_UCS4) _PyUnicode_ToTitlecase(
 #ifdef __cplusplus
 }
 #endif
-#endif   /* !Py_INTERNAL_TUPLEOBJECT_H */
+#endif   /* !Py_INTERNAL_UNICODEOBJECT_H */

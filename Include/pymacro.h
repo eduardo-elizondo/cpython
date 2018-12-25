@@ -10,13 +10,11 @@
 /* Absolute value of the number x */
 #define Py_ABS(x) ((x) < 0 ? -(x) : (x))
 
-#define _Py_XSTRINGIFY(x) #x
-
 /* Convert the argument to a string. For example, Py_STRINGIFY(123) is replaced
    with "123" by the preprocessor. Defines are also replaced by their value.
    For example Py_STRINGIFY(__LINE__) is replaced by the line number, not
    by "__LINE__". */
-#define Py_STRINGIFY(x) _Py_XSTRINGIFY(x)
+#define Py_STRINGIFY(x) #x
 
 /* Get the size of a structure member in bytes */
 #define Py_MEMBER_SIZE(type, member) sizeof(((type *)0)->member)

@@ -24,6 +24,7 @@ typedef wchar_t Py_UNICODE /* Py_DEPRECATED(3.3) */;
 #define Py_UNICODE_ISSPACE(ch) \
     ((ch) < 128U ? _Py_ascii_whitespace[(ch)] : _PyUnicode_IsWhitespace(ch))
 
+#define Py_UNICODE_ISPRINTABLE(ch) _PyUnicode_IsPrintable(ch)
 #define Py_UNICODE_ISUPPER(ch) _PyUnicode_IsUppercase(ch)
 #define Py_UNICODE_ISTITLE(ch) _PyUnicode_IsTitlecase(ch)
 
@@ -1055,6 +1056,10 @@ PyAPI_DATA(const unsigned char) _Py_ascii_whitespace[];
    These APIs are implemented in Objects/unicodectype.c.
 
 */
+
+PyAPI_FUNC(int) _PyUnicode_IsPrintable(
+    Py_UCS4 ch       /* Unicode character */
+    );
 
 PyAPI_FUNC(int) _PyUnicode_IsUppercase(
     Py_UCS4 ch       /* Unicode character */

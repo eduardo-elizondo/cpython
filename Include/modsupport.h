@@ -19,9 +19,6 @@ extern "C" {
 #define PyArg_VaParseTupleAndKeywords   _PyArg_VaParseTupleAndKeywords_SizeT
 #define Py_BuildValue                   _Py_BuildValue_SizeT
 #define Py_VaBuildValue                 _Py_VaBuildValue_SizeT
-#ifndef Py_LIMITED_API
-#define _Py_VaBuildStack                _Py_VaBuildStack_SizeT
-#endif
 #else
 #ifndef Py_LIMITED_API
 PyAPI_FUNC(PyObject *) _Py_VaBuildValue_SizeT(const char *, va_list);
