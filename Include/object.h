@@ -444,7 +444,12 @@ static inline void _Py_ForgetReference(PyObject *op)
 }
 #endif /* !Py_TRACE_REFS */
 
-
+/*
+These are provided as conveniences to Python runtime embedders, so that
+they can have object code that is not dependent on Python compilation flags.
+*/
+PyAPI_FUNC(void) Py_IncRef(PyObject *);
+PyAPI_FUNC(void) Py_DecRef(PyObject *);
 PyAPI_FUNC(void) _Py_Dealloc(PyObject *);
 
 static inline void _Py_INCREF(PyObject *op)
@@ -453,7 +458,7 @@ static inline void _Py_INCREF(PyObject *op)
     op->ob_refcnt++;
 }
 
-#define Py_INCREF(op) _Py_INCREF(_PyObject_CAST(op))
+#define Py_INCREF(op) Py_IncRef((PyObject *)op)
 
 static inline void _Py_DECREF(const char *filename, int lineno,
                               PyObject *op)
@@ -471,7 +476,7 @@ static inline void _Py_DECREF(const char *filename, int lineno,
     }
 }
 
-#define Py_DECREF(op) _Py_DECREF(__FILE__, __LINE__, _PyObject_CAST(op))
+#define Py_DECREF(op) Py_DecRef((PyObject *)(op))
 
 
 /* Safely decref `op` and set `op` to NULL, especially useful in tp_clear
@@ -535,13 +540,6 @@ static inline void _Py_XDECREF(PyObject *op)
 }
 
 #define Py_XDECREF(op) _Py_XDECREF(_PyObject_CAST(op))
-
-/*
-These are provided as conveniences to Python runtime embedders, so that
-they can have object code that is not dependent on Python compilation flags.
-*/
-PyAPI_FUNC(void) Py_IncRef(PyObject *);
-PyAPI_FUNC(void) Py_DecRef(PyObject *);
 
 /*
 _Py_NoneStruct is an object of undefined type which can be used in contexts

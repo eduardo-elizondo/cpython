@@ -213,13 +213,19 @@ _Py_NegativeRefcount(const char *filename, int lineno, PyObject *op)
 void
 Py_IncRef(PyObject *o)
 {
-    Py_XINCREF(o);
+    _Py_INC_REFTOTAL;
+    o->ob_refcnt++;
 }
 
 void
 Py_DecRef(PyObject *o)
 {
-    Py_XDECREF(o);
+    _Py_DEC_REFTOTAL;
+    if (--o->ob_refcnt != 0) {
+    }
+    else {
+        _Py_Dealloc(o);
+    }
 }
 
 PyObject *
