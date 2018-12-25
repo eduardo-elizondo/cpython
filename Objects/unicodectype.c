@@ -41,6 +41,7 @@ typedef struct {
 } _PyUnicode_TypeRecord;
 
 #include "unicodetype_db.h"
+#include "pycore_unicodeobject.h"
 
 static const _PyUnicode_TypeRecord *
 gettyperecord(Py_UCS4 code)

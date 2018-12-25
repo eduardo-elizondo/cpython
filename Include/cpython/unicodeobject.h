@@ -24,39 +24,16 @@ typedef wchar_t Py_UNICODE /* Py_DEPRECATED(3.3) */;
 #define Py_UNICODE_ISSPACE(ch) \
     ((ch) < 128U ? _Py_ascii_whitespace[(ch)] : _PyUnicode_IsWhitespace(ch))
 
-#define Py_UNICODE_ISLOWER(ch) _PyUnicode_IsLowercase(ch)
 #define Py_UNICODE_ISUPPER(ch) _PyUnicode_IsUppercase(ch)
 #define Py_UNICODE_ISTITLE(ch) _PyUnicode_IsTitlecase(ch)
-#define Py_UNICODE_ISLINEBREAK(ch) _PyUnicode_IsLinebreak(ch)
-
-#define Py_UNICODE_TOLOWER(ch) _PyUnicode_ToLowercase(ch)
-#define Py_UNICODE_TOUPPER(ch) _PyUnicode_ToUppercase(ch)
-#define Py_UNICODE_TOTITLE(ch) _PyUnicode_ToTitlecase(ch)
-
-#define Py_UNICODE_ISDECIMAL(ch) _PyUnicode_IsDecimalDigit(ch)
-#define Py_UNICODE_ISDIGIT(ch) _PyUnicode_IsDigit(ch)
-#define Py_UNICODE_ISNUMERIC(ch) _PyUnicode_IsNumeric(ch)
-#define Py_UNICODE_ISPRINTABLE(ch) _PyUnicode_IsPrintable(ch)
 
 #define Py_UNICODE_TODECIMAL(ch) _PyUnicode_ToDecimalDigit(ch)
 #define Py_UNICODE_TODIGIT(ch) _PyUnicode_ToDigit(ch)
 #define Py_UNICODE_TONUMERIC(ch) _PyUnicode_ToNumeric(ch)
 
-#define Py_UNICODE_ISALPHA(ch) _PyUnicode_IsAlpha(ch)
-
-#define Py_UNICODE_ISALNUM(ch) \
-       (Py_UNICODE_ISALPHA(ch) || \
-    Py_UNICODE_ISDECIMAL(ch) || \
-    Py_UNICODE_ISDIGIT(ch) || \
-    Py_UNICODE_ISNUMERIC(ch))
 
 #define Py_UNICODE_COPY(target, source, length) \
     memcpy((target), (source), (length)*sizeof(Py_UNICODE))
-
-#define Py_UNICODE_FILL(target, value, length) \
-    do {Py_ssize_t i_; Py_UNICODE *t_ = (target); Py_UNICODE v_ = (value);\
-        for (i_ = 0; i_ < (length); i_++) t_[i_] = v_;\
-    } while (0)
 
 /* macros to work with surrogates */
 #define Py_UNICODE_IS_SURROGATE(ch) (0xD800 <= (ch) && (ch) <= 0xDFFF)
@@ -73,11 +50,6 @@ typedef wchar_t Py_UNICODE /* Py_DEPRECATED(3.3) */;
 
 /* Check if substring matches at given offset.  The offset must be
    valid, and the substring must not be empty. */
-
-#define Py_UNICODE_MATCH(string, offset, substring) \
-    ((*((string)->wstr + (offset)) == *((substring)->wstr)) && \
-     ((*((string)->wstr + (offset) + (substring)->wstr_length-1) == *((substring)->wstr + (substring)->wstr_length-1))) && \
-     !memcmp((string)->wstr + (offset), (substring)->wstr, (substring)->wstr_length*sizeof(Py_UNICODE)))
 
 /* --- Unicode Type ------------------------------------------------------- */
 
@@ -1084,10 +1056,6 @@ PyAPI_DATA(const unsigned char) _Py_ascii_whitespace[];
 
 */
 
-PyAPI_FUNC(int) _PyUnicode_IsLowercase(
-    Py_UCS4 ch       /* Unicode character */
-    );
-
 PyAPI_FUNC(int) _PyUnicode_IsUppercase(
     Py_UCS4 ch       /* Unicode character */
     );
@@ -1107,22 +1075,6 @@ PyAPI_FUNC(int) _PyUnicode_IsXidContinue(
 PyAPI_FUNC(int) _PyUnicode_IsWhitespace(
     const Py_UCS4 ch         /* Unicode character */
     );
-
-PyAPI_FUNC(int) _PyUnicode_IsLinebreak(
-    const Py_UCS4 ch         /* Unicode character */
-    );
-
-PyAPI_FUNC(Py_UCS4) _PyUnicode_ToLowercase(
-    Py_UCS4 ch       /* Unicode character */
-    ) /* Py_DEPRECATED(3.3) */;
-
-PyAPI_FUNC(Py_UCS4) _PyUnicode_ToUppercase(
-    Py_UCS4 ch       /* Unicode character */
-    ) /* Py_DEPRECATED(3.3) */;
-
-PyAPI_FUNC(Py_UCS4) _PyUnicode_ToTitlecase(
-    Py_UCS4 ch       /* Unicode character */
-    ) Py_DEPRECATED(3.3);
 
 PyAPI_FUNC(int) _PyUnicode_ToLowerFull(
     Py_UCS4 ch,       /* Unicode character */
@@ -1161,26 +1113,6 @@ PyAPI_FUNC(int) _PyUnicode_ToDigit(
     );
 
 PyAPI_FUNC(double) _PyUnicode_ToNumeric(
-    Py_UCS4 ch       /* Unicode character */
-    );
-
-PyAPI_FUNC(int) _PyUnicode_IsDecimalDigit(
-    Py_UCS4 ch       /* Unicode character */
-    );
-
-PyAPI_FUNC(int) _PyUnicode_IsDigit(
-    Py_UCS4 ch       /* Unicode character */
-    );
-
-PyAPI_FUNC(int) _PyUnicode_IsNumeric(
-    Py_UCS4 ch       /* Unicode character */
-    );
-
-PyAPI_FUNC(int) _PyUnicode_IsPrintable(
-    Py_UCS4 ch       /* Unicode character */
-    );
-
-PyAPI_FUNC(int) _PyUnicode_IsAlpha(
     Py_UCS4 ch       /* Unicode character */
     );
 

@@ -12,6 +12,7 @@
 #define SRE_INCLUDED
 
 #include "sre_constants.h"
+#include "pycore_unicodeobject.h"
 
 /* size of a code word (must be unsigned short or larger, and
    large enough to hold a UCS4 character) */

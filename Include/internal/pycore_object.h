@@ -10,6 +10,38 @@ extern "C" {
 
 #include "pycore_pystate.h"   /* _PyRuntime */
 
+/* Bit flags for _gc_prev */
+/* Bit 0 is set when tp_finalize is called */
+#define _PyGC_PREV_MASK_FINALIZED  (1)
+/* Bit 1 is set when the object is in generation which is GCed currently. */
+#define _PyGC_PREV_MASK_COLLECTING (2)
+/* The (N-2) most significant bits contain the real address. */
+#define _PyGC_PREV_SHIFT           (2)
+#define _PyGC_PREV_MASK            (((uintptr_t) -1) << _PyGC_PREV_SHIFT)
+
+// Lowest bit of _gc_next is used for flags only in GC.
+// But it is always 0 for normal code.
+#define _PyGCHead_NEXT(g)        ((PyGC_Head*)(g)->_gc_next)
+#define _PyGCHead_SET_NEXT(g, p) ((g)->_gc_next = (uintptr_t)(p))
+
+// Lowest two bits of _gc_prev is used for _PyGC_PREV_MASK_* flags.
+#define _PyGCHead_PREV(g) ((PyGC_Head*)((g)->_gc_prev & _PyGC_PREV_MASK))
+#define _PyGCHead_SET_PREV(g, p) do { \
+    assert(((uintptr_t)p & ~_PyGC_PREV_MASK) == 0); \
+    (g)->_gc_prev = ((g)->_gc_prev & ~_PyGC_PREV_MASK) \
+        | ((uintptr_t)(p)); \
+    } while (0)
+
+#define _PyGCHead_FINALIZED(g) \
+    (((g)->_gc_prev & _PyGC_PREV_MASK_FINALIZED) != 0)
+#define _PyGCHead_SET_FINALIZED(g) \
+    ((g)->_gc_prev |= _PyGC_PREV_MASK_FINALIZED)
+
+#define _PyGC_FINALIZED(o) \
+    _PyGCHead_FINALIZED(_Py_AS_GC(o))
+#define _PyGC_SET_FINALIZED(o) \
+    _PyGCHead_SET_FINALIZED(_Py_AS_GC(o))
+
 /* Tell the GC to track this object.
  *
  * NB: While the object is tracked by the collector, it must be safe to call the

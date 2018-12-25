@@ -43,6 +43,7 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include "pycore_fileutils.h"
 #include "pycore_object.h"
 #include "pycore_pystate.h"
+#include "pycore_unicodeobject.h"
 #include "ucnhash.h"
 #include "bytes_methods.h"
 #include "stringlib/eq.h"
