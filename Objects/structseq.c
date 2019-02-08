@@ -376,7 +376,7 @@ PyStructSequence_InitType2(PyTypeObject *type, PyStructSequence_Desc *desc)
     type->tp_base = &PyTuple_Type;
     type->tp_methods = structseq_methods;
     type->tp_new = structseq_new;
-    type->tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC;
+    type->tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC;
 
     n_members = count_members(desc, &n_unnamed_members);
     members = PyMem_NEW(PyMemberDef, n_members - n_unnamed_members + 1);
@@ -443,7 +443,7 @@ PyStructSequence_NewType(PyStructSequence_Desc *desc)
     spec.name = desc->name;
     spec.basicsize = sizeof(PyStructSequence) - sizeof(PyObject *);
     spec.itemsize = sizeof(PyObject *);
-    spec.flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC;
+    spec.flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC;
     spec.slots = slots;
 
     bases = PyTuple_Pack(1, &PyTuple_Type);

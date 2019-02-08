@@ -1796,13 +1796,13 @@ static PyStructSequence_Field stat_result_fields[] = {
     {"st_uid",     "user ID of owner"},
     {"st_gid",     "group ID of owner"},
     {"st_size",    "total size, in bytes"},
+    {"st_atime",   "time of last access"},
+    {"st_mtime",   "time of last modification"},
+    {"st_ctime",   "time of last change"},
     /* The NULL is replaced with PyStructSequence_UnnamedField later. */
     {NULL,   "integer time of last access"},
     {NULL,   "integer time of last modification"},
     {NULL,   "integer time of last change"},
-    {"st_atime",   "time of last access"},
-    {"st_mtime",   "time of last modification"},
-    {"st_ctime",   "time of last change"},
     {"st_atime_ns",   "time of last access in nanoseconds"},
     {"st_mtime_ns",   "time of last modification in nanoseconds"},
     {"st_ctime_ns",   "time of last change in nanoseconds"},
@@ -1951,30 +1951,6 @@ static PyTypeObject* StatVFSResultType;
 #if defined(HAVE_SCHED_SETPARAM) || defined(HAVE_SCHED_SETSCHEDULER) || defined(POSIX_SPAWN_SETSCHEDULER) || defined(POSIX_SPAWN_SETSCHEDPARAM)
 static PyTypeObject* SchedParamType;
 #endif
-static newfunc structseq_new;
-
-static PyObject *
-statresult_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
-{
-    PyStructSequence *result;
-    int i;
-
-    result = (PyStructSequence*)structseq_new(type, args, kwds);
-    if (!result)
-        return NULL;
-    /* If we have been initialized from a tuple,
-       st_?time might be set to None. Initialize it
-       from the int slots.  */
-    for (i = 7; i <= 9; i++) {
-        if (result->ob_item[i+3] == Py_None) {
-            Py_DECREF(Py_None);
-            Py_INCREF(result->ob_item[i]);
-            result->ob_item[i+3] = result->ob_item[i];
-        }
-    }
-    return (PyObject*)result;
-}
-
 
 static PyObject *billion = NULL;
 
@@ -6015,7 +5991,7 @@ os_sched_param_impl(PyTypeObject *type, PyObject *sched_priority)
 {
     PyObject *res;
 
-    res = PyStructSequence_New(type);
+    res = PyStructSequence_New(PyType_GetSlot(type ,Py_tp_base));
     if (!res)
         return NULL;
     Py_INCREF(sched_priority);
@@ -6043,7 +6019,7 @@ convert_sched_param(PyObject *param, struct sched_param *res)
 {
     long priority;
 
-    if (Py_TYPE(param) != SchedParamType) {
+    if (Py_TYPE(param) != PyType_GetSlot(SchedParamType, Py_tp_base)) {
         PyErr_SetString(PyExc_TypeError, "must have a sched_param object");
         return 0;
     }
@@ -6114,7 +6090,7 @@ os_sched_getparam_impl(PyObject *module, pid_t pid)
 
     if (sched_getparam(pid, &param))
         return posix_error();
-    result = PyStructSequence_New(SchedParamType);
+    result = PyStructSequence_New(PyType_GetSlot(SchedParamType, Py_tp_base));
     if (!result)
         return NULL;
     priority = PyLong_FromLong(param.sched_priority);
@@ -13938,9 +13914,11 @@ static const char * const have_functions[] = {
 PyMODINIT_FUNC
 INITFUNC(void)
 {
-    PyObject *m, *v;
+    PyObject *m, *v, *st, *st_bases;
     PyObject *list;
     const char * const *trace;
+    PyType_Slot st_slots[2];
+    PyType_Spec st_spec;
 
 #if defined(HAVE_SYMLINK) && defined(MS_WINDOWS)
     win32_can_symlink = enable_symlink();
@@ -13981,15 +13959,13 @@ INITFUNC(void)
 #endif
 
         stat_result_desc.name = "os.stat_result"; /* see issue #19209 */
-        stat_result_desc.fields[7].name = PyStructSequence_UnnamedField;
-        stat_result_desc.fields[8].name = PyStructSequence_UnnamedField;
-        stat_result_desc.fields[9].name = PyStructSequence_UnnamedField;
+        stat_result_desc.fields[10].name = PyStructSequence_UnnamedField;
+        stat_result_desc.fields[11].name = PyStructSequence_UnnamedField;
+        stat_result_desc.fields[12].name = PyStructSequence_UnnamedField;
         StatResultType = PyStructSequence_NewType(&stat_result_desc);
         if (StatResultType == NULL) {
             return NULL;
         }
-        structseq_new = StatResultType->tp_new;
-        StatResultType->tp_new = statresult_new;
 
         statvfs_result_desc.name = "os.statvfs_result"; /* see issue #19209 */
         StatVFSResultType = PyStructSequence_NewType(&statvfs_result_desc);
@@ -14008,11 +13984,24 @@ INITFUNC(void)
 
 #if defined(HAVE_SCHED_SETPARAM) || defined(HAVE_SCHED_SETSCHEDULER) || defined(POSIX_SPAWN_SETSCHEDULER) || defined(POSIX_SPAWN_SETSCHEDPARAM)
         sched_param_desc.name = MODNAME ".sched_param";
-        SchedParamType = PyStructSequence_NewType(&sched_param_desc);
+        st = (PyObject *)PyStructSequence_NewType(&sched_param_desc);
+        if (st == NULL) {
+            return NULL;
+        }
+        st_slots[0] = (PyType_Slot){Py_tp_new, os_sched_param};
+        st_slots[1] = (PyType_Slot){0, 0};
+        st_spec.name = MODNAME "._sched_param";
+        st_spec.flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC;
+        st_spec.slots = st_slots;
+        st_bases = PyTuple_Pack(1, st);
+        if (st_bases == NULL) {
+            return NULL;
+        }
+        SchedParamType = (PyTypeObject *)PyType_FromSpecWithBases(&st_spec, st_bases);
+        Py_DECREF(st_bases);
         if (SchedParamType == NULL) {
             return NULL;
         }
-        SchedParamType->tp_new = os_sched_param;
 #endif
 
         /* initialize TerminalSize_info */
