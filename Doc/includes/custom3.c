@@ -12,16 +12,20 @@ typedef struct {
 static void
 Custom_dealloc(CustomObject *self)
 {
+    PyTypeObject *type = Py_TYPE(self);
     Py_XDECREF(self->first);
     Py_XDECREF(self->last);
-    Py_TYPE(self)->tp_free((PyObject *) self);
+    freefunc free_func = (freefunc) PyType_GetSlot(type, Py_tp_free);
+    free_func((PyObject *) self);
+    Py_DECREF(type);
 }
 
 static PyObject *
 Custom_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
     CustomObject *self;
-    self = (CustomObject *) type->tp_alloc(type, 0);
+    allocfunc alloc_func = (allocfunc) PyType_GetSlot(type, Py_tp_alloc);
+    self = (CustomObject *) alloc_func(type, 0);
     if (self != NULL) {
         self->first = PyUnicode_FromString("");
         if (self->first == NULL) {
@@ -145,19 +149,24 @@ static PyMethodDef Custom_methods[] = {
     {NULL}  /* Sentinel */
 };
 
-static PyTypeObject CustomType = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name = "custom3.Custom",
-    .tp_doc = "Custom objects",
-    .tp_basicsize = sizeof(CustomObject),
-    .tp_itemsize = 0,
-    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
-    .tp_new = Custom_new,
-    .tp_init = (initproc) Custom_init,
-    .tp_dealloc = (destructor) Custom_dealloc,
-    .tp_members = Custom_members,
-    .tp_methods = Custom_methods,
-    .tp_getset = Custom_getsetters,
+PyDoc_STRVAR(Custom_doc, "Custom objects");
+
+static PyType_Slot CustomType_slots[] = {
+    {Py_tp_dealloc, Custom_dealloc},
+    {Py_tp_doc, Custom_doc},
+    {Py_tp_getset, Custom_getsetters},
+    {Py_tp_init, Custom_init},
+    {Py_tp_members, Custom_members},
+    {Py_tp_methods, Custom_methods},
+    {Py_tp_new, Custom_new},
+}
+
+static PyType_Spec CustomType_spec = {
+    "custom3.Custom",
+    sizeof(CustomObject),
+    0,
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    CustomType_slots,
 };
 
 static PyModuleDef custommodule = {
@@ -170,18 +179,23 @@ static PyModuleDef custommodule = {
 PyMODINIT_FUNC
 PyInit_custom3(void)
 {
-    PyObject *m;
-    if (PyType_Ready(&CustomType) < 0)
-        return NULL;
+    PyObject *m, *CustomType;
 
     m = PyModule_Create(&custommodule);
-    if (m == NULL)
+    if (m == NULL) {
         return NULL;
+    }
 
-    Py_INCREF(&CustomType);
-    if (PyModule_AddObject(m, "Custom", (PyObject *) &CustomType) < 0) {
-        Py_DECREF(&CustomType);
-        Py_DECREF(m);
+    CustomType = PyType_FromSpec(&CustomType_spec);
+    if (CustomType == NULL) {
+        PY_DECREF(m);
+        return NULL;
+    }
+
+    Py_INCREF(CustomType);
+    if (PyModule_AddObject(m, "Custom", CustomType) < 0) {
+        Py_DECREF(CustomType);
+        PY_DECREF(m);
         return NULL;
     }
 

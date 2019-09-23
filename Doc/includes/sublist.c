@@ -28,15 +28,20 @@ SubList_init(SubListObject *self, PyObject *args, PyObject *kwds)
     return 0;
 }
 
-static PyTypeObject SubListType = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name = "sublist.SubList",
-    .tp_doc = "SubList objects",
-    .tp_basicsize = sizeof(SubListObject),
-    .tp_itemsize = 0,
-    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
-    .tp_init = (initproc) SubList_init,
-    .tp_methods = SubList_methods,
+PyDoc_STRVAR(SubList_doc, "SubList objects");
+
+static PyType_Slot SubListType_slots[] = {
+    {Py_tp_doc, SubList_doc},
+    {Py_tp_init, SubList_init},
+    {Py_tp_methods, SubList_methods},
+}
+
+static PyType_Spec SubListType_spec = {
+    "sublist.SubList",
+    sizeof(SubListObject),
+    0,
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    SubListType_slots,
 };
 
 static PyModuleDef sublistmodule = {
@@ -49,18 +54,24 @@ static PyModuleDef sublistmodule = {
 PyMODINIT_FUNC
 PyInit_sublist(void)
 {
-    PyObject *m;
-    SubListType.tp_base = &PyList_Type;
-    if (PyType_Ready(&SubListType) < 0)
-        return NULL;
+    PyObject *m, *bases, *SubListType;
 
     m = PyModule_Create(&sublistmodule);
-    if (m == NULL)
+    if (m == NULL) {
         return NULL;
+    }
 
-    Py_INCREF(&SubListType);
-    if (PyModule_AddObject(m, "SubList", (PyObject *) &SubListType) < 0) {
-        Py_DECREF(&SubListType);
+    bases = PyTuple_Pack(1, &PyList_Type);
+    SubListType = PyType_FromSpecWithBases(&SubListType_spec, bases);
+    Py_DECREF(bases);
+    if (SubListType == NULL) {
+        PY_DECREF(m);
+        return NULL;
+    }
+
+    Py_INCREF(SubListType);
+    if (PyModule_AddObject(m, "SubList", SubListType) < 0) {
+        Py_DECREF(SubListType);
         Py_DECREF(m);
         return NULL;
     }

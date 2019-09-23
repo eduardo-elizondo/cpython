@@ -24,7 +24,7 @@ static PyObject *
 Custom_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
     CustomObject *self;
-    allocfunc alloc_func = (allocfunc)PyType_GetSlot(type, Py_tp_alloc);
+    allocfunc alloc_func = (allocfunc) PyType_GetSlot(type, Py_tp_alloc);
     self = (CustomObject *) alloc_func(type, 0);
     if (self != NULL) {
         self->first = PyUnicode_FromString("");
@@ -99,11 +99,11 @@ static PyMethodDef Custom_methods[] = {
     {NULL}  /* Sentinel */
 };
 
-PyDoc_STRVAR(CustomType_doc, "Custom objects");
+PyDoc_STRVAR(Custom_doc, "Custom objects");
 
 static PyType_Slot CustomType_slots[] = {
     {Py_tp_dealloc, Custom_dealloc},
-    {Py_tp_doc, CustomType_doc},
+    {Py_tp_doc, Custom_doc},
     {Py_tp_init, Custom_init},
     {Py_tp_members, Custom_members},
     {Py_tp_methods, Custom_methods},
@@ -128,7 +128,7 @@ static PyModuleDef custommodule = {
 PyMODINIT_FUNC
 PyInit_custom2(void)
 {
-    PyObject *m, CustomType;
+    PyObject *m, *CustomType;
 
     m = PyModule_Create(&custommodule);
     if (m == NULL) {

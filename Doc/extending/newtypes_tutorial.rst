@@ -80,10 +80,10 @@ standard Python floats::
 
 The second bit is the definition of the type spec. ::
 
-   PyDoc_STRVAR(CustomType_doc, "Custom objects");
+   PyDoc_STRVAR(Custom_doc, "Custom objects");
 
    static PyType_Slot CustomType_slots[] = {
-       {Py_tp_doc, CustomType_doc},
+       {Py_tp_doc, Custom_doc},
        {Py_tp_new, PyType_GenericNew},
    }
 
@@ -148,7 +148,7 @@ The rest of the type information was to be included as part of the type slots::
 
 We provide a doc string for the type in the doc type slot. ::
 
-   {Py_tp_doc, CustomType_doc},
+   {Py_tp_doc, Custom_doc},
 
 To enable object creation, we have to provide a ``Py_tp_new`` type slot.
 This is the equivalent of the Python method :meth:`__new__`, but has to be
@@ -587,9 +587,9 @@ We create an array of :c:type:`PyGetSetDef` structures::
        {NULL}  /* Sentinel */
    };
 
-and register it in the :c:member:`~PyTypeObject.tp_getset` slot::
+and register it in the ``Py_tp_getset`` slot::
 
-   .tp_getset = Custom_getsetters,
+   {Py_tp_getset, Custom_getsetters},
 
 The last item in a :c:type:`PyGetSetDef` structure is the "closure" mentioned
 above.  In this case, we aren't using a closure, so we just pass *NULL*.
@@ -602,8 +602,8 @@ We also remove the member definitions for these attributes::
        {NULL}  /* Sentinel */
    };
 
-We also need to update the :c:member:`~PyTypeObject.tp_init` handler to only
-allow strings [#]_ to be passed::
+We also need to update the ``Py_tp_init`` slot to only allow
+strings [#]_ to be passed::
 
    static int
    Custom_init(CustomObject *self, PyObject *args, PyObject *kwds)
@@ -635,8 +635,8 @@ With these changes, we can assure that the ``first`` and ``last`` members are
 never *NULL* so we can remove checks for *NULL* values in almost all cases.
 This means that most of the :c:func:`Py_XDECREF` calls can be converted to
 :c:func:`Py_DECREF` calls.  The only place we can't change these calls is in
-the ``tp_dealloc`` implementation, where there is the possibility that the
-initialization of these members failed in ``tp_new``.
+the ``Py_tp_dealloc`` implementation, where there is the possibility that the
+initialization of these members failed in ``Py_tp_new``.
 
 We also rename the module initialization function and module name in the
 initialization function, as we did before, and we add an extra definition to the
@@ -745,7 +745,7 @@ attribute again (*especially* if there is a reference cycle).
 .. note::
    You could emulate :c:func:`Py_CLEAR` by writing::
 
-      PyObject *tmp;
+      PyObject *tmp*;
       tmp = self->first;
       self->first = NULL;
       Py_XDECREF(tmp);
@@ -764,18 +764,21 @@ and ``Custom_clear``::
    static void
    Custom_dealloc(CustomObject *self)
    {
+       PyTypeObject *type = Py_TYPE(self);
        PyObject_GC_UnTrack(self);
        Custom_clear(self);
-       Py_TYPE(self)->tp_free((PyObject *) self);
+       freefunc free_func = (freefunc) PyType_GetSlot(type, Py_tp_free);
+       free_func((PyObject *) self);
+       Py_DECREF(type);
    }
 
-Finally, we add the :const:`Py_TPFLAGS_HAVE_GC` flag to the class flags::
+Finally, we add the :const:`Py_TPFLAGS_HAVE_GC` flag to the type spec::
 
-   .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC,
+   Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC,
 
-That's pretty much it.  If we had written custom :c:member:`~PyTypeObject.tp_alloc` or
-:c:member:`~PyTypeObject.tp_free` handlers, we'd need to modify them for cyclic
-garbage collection.  Most extensions will use the versions automatically provided.
+That's pretty much it.  If we had written custom ``Py_tp_alloc`` or
+``Py_tp_free`` type slots, we'd need to modify them for cyclic garbage
+collection.  Most extensions will use the versions automatically provided.
 
 
 Subclassing other types
@@ -833,33 +836,35 @@ can be safely cast to both ``PyListObject *`` and ``SubListObject *``::
 We see above how to call through to the :attr:`__init__` method of the base
 type.
 
-This pattern is important when writing a type with custom
-:c:member:`~PyTypeObject.tp_new` and :c:member:`~PyTypeObject.tp_dealloc`
-members.  The :c:member:`~PyTypeObject.tp_new` handler should not actually
-create the memory for the object with its :c:member:`~PyTypeObject.tp_alloc`,
-but let the base class handle it by calling its own :c:member:`~PyTypeObject.tp_new`.
+This pattern is important when writing a type with custom ``Py_tp_new`` and
+``Py_tp_dealloc`` members.  The ``Py_tp_new`` slot should not actually
+create the memory for the object with its ``Py_tp_alloc``, but let the base
+class handle it by calling its own ``Py_tp_new``.
 
-The :c:type:`PyTypeObject` struct supports a :c:member:`~PyTypeObject.tp_base`
-specifying the type's concrete base class.  Due to cross-platform compiler
-issues, you can't fill that field directly with a reference to
-:c:type:`PyList_Type`; it should be done later in the module initialization
-function::
+The type creation allows to subclass using :c:func:`PyType_FromSpecWithBases`
+specifying the type's concrete base class::
 
    PyMODINIT_FUNC
    PyInit_sublist(void)
    {
-       PyObject* m;
-       SubListType.tp_base = &PyList_Type;
-       if (PyType_Ready(&SubListType) < 0)
-           return NULL;
+       PyObject *m, *bases, *SubListType;
 
        m = PyModule_Create(&sublistmodule);
-       if (m == NULL)
+       if (m == NULL) {
            return NULL;
+       }
 
-       Py_INCREF(&SubListType);
-       if (PyModule_AddObject(m, "SubList", (PyObject *) &SubListType) < 0) {
-           Py_DECREF(&SubListType);
+       bases = PyTuple_Pack(1, &PyList_Type);
+       SubListType = PyType_FromSpecWithBases(&SubListType_spec, bases);
+       Py_DECREF(bases);
+       if (SubListType == NULL) {
+           PY_DECREF(m);
+           return NULL;
+       }
+
+       Py_INCREF(SubListType);
+       if (PyModule_AddObject(m, "SubList", SubListType) < 0) {
+           Py_DECREF(SubListType);
            Py_DECREF(m);
            return NULL;
        }
@@ -867,14 +872,12 @@ function::
        return m;
    }
 
-Before calling :c:func:`PyType_Ready`, the type structure must have the
-:c:member:`~PyTypeObject.tp_base` slot filled in.  When we are deriving an
-existing type, it is not necessary to fill out the :c:member:`~PyTypeObject.tp_alloc`
-slot with :c:func:`PyType_GenericNew` -- the allocation function from the base
-type will be inherited.
+When we are deriving an existing type, it is not necessary to fill out the
+``Py_tp_alloc`` slot with :c:func:`PyType_GenericNew` -- the allocation function
+from the base type will be inherited.
 
-After that, calling :c:func:`PyType_Ready` and adding the type object to the
-module is the same as with the basic :class:`Custom` examples.
+After that, calling :c:func:`PyType_FromSpecWithBases` and adding the type
+object to the module is the same as with the basic :class:`Custom` examples.
 
 
 .. rubric:: Footnotes
@@ -882,7 +885,7 @@ module is the same as with the basic :class:`Custom` examples.
 .. [#] This is true when we know that the object is a basic type, like a string or a
    float.
 
-.. [#] We relied on this in the :c:member:`~PyTypeObject.tp_dealloc` handler
+.. [#] We relied on this in the ``Py_tp_dealloc`` slot
    in this example, because our type doesn't support garbage collection.
 
 .. [#] We now know that the first and last members are strings, so perhaps we

@@ -6,10 +6,10 @@ typedef struct {
     /* Type-specific fields go here. */
 } CustomObject;
 
-PyDoc_STRVAR(CustomType_doc, "Custom objects");
+PyDoc_STRVAR(Custom_doc, "Custom objects");
 
 static PyType_Slot CustomType_slots[] = {
-    {Py_tp_doc, CustomType_doc},
+    {Py_tp_doc, Custom_doc},
     {Py_tp_new, PyType_GenericNew},
 }
 
@@ -31,7 +31,7 @@ static struct PyModuleDef custommodule = {
 PyMODINIT_FUNC
 PyInit_custom(void)
 {
-    PyObject *m, CustomType;
+    PyObject *m, *CustomType;
 
     m = PyModule_Create(&custommodule);
     if (m == NULL) {
