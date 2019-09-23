@@ -39,12 +39,6 @@ This sort of thing can only be explained by example, so here's a minimal, but
 complete, module that defines a new type named :class:`Custom` inside a C
 extension module :mod:`custom`:
 
-.. note::
-   What we're showing here is the traditional way of defining *static*
-   extension types.  It should be adequate for most uses.  The C API also
-   allows defining heap-allocated extension types using the
-   :c:func:`PyType_FromSpec` function, which isn't covered in this tutorial.
-
 .. literalinclude:: ../includes/custom.c
 
 Now that's quite a bit to take in at once, but hopefully bits will seem familiar
@@ -52,7 +46,7 @@ from the previous chapter.  This file defines three things:
 
 #. What a :class:`Custom` **object** contains: this is the ``CustomObject``
    struct, which is allocated once for each :class:`Custom` instance.
-#. How the :class:`Custom` **type** behaves: this is the ``CustomType`` struct,
+#. How the :class:`Custom` **type** behaves: this is the ``CustomType`` spec,
    which defines a set of flags and function pointers that the interpreter
    inspects when specific operations are requested.
 #. How to initialize the :mod:`custom` module: this is the ``PyInit_custom``
@@ -84,36 +78,26 @@ standard Python floats::
        double ob_fval;
    } PyFloatObject;
 
-The second bit is the definition of the type object. ::
+The second bit is the definition of the type spec. ::
 
-   static PyTypeObject CustomType = {
-       PyVarObject_HEAD_INIT(NULL, 0)
-       .tp_name = "custom.Custom",
-       .tp_doc = "Custom objects",
-       .tp_basicsize = sizeof(CustomObject),
-       .tp_itemsize = 0,
-       .tp_flags = Py_TPFLAGS_DEFAULT,
-       .tp_new = PyType_GenericNew,
+   PyDoc_STRVAR(CustomType_doc, "Custom objects");
+
+   static PyType_Slot CustomType_slots[] = {
+       {Py_tp_doc, CustomType_doc},
+       {Py_tp_new, PyType_GenericNew},
+   }
+
+   static PyType_Spec CustomType_spec = {
+       "custom.Custom",
+       sizeof(CustomObject),
+       0,
+       Py_TPFLAGS_DEFAULT,
+       CustomType_slots,
    };
-
-.. note::
-   We recommend using C99-style designated initializers as above, to
-   avoid listing all the :c:type:`PyTypeObject` fields that you don't care
-   about and also to avoid caring about the fields' declaration order.
-
-The actual definition of :c:type:`PyTypeObject` in :file:`object.h` has
-many more :ref:`fields <type-structs>` than the definition above.  The
-remaining fields will be filled with zeros by the C compiler, and it's
-common practice to not specify them explicitly unless you need them.
 
 We're going to pick it apart, one field at a time::
 
-   PyVarObject_HEAD_INIT(NULL, 0)
-
-This line is mandatory boilerplate to initialize the ``ob_base``
-field mentioned above. ::
-
-   .tp_name = "custom.Custom",
+   "custom.Custom",
 
 The name of our type.  This will appear in the default textual representation of
 our objects and in some error messages, for example:
@@ -131,57 +115,63 @@ the type is :class:`Custom`, so we set the type name to :class:`custom.Custom`.
 Using the real dotted import path is important to make your type compatible
 with the :mod:`pydoc` and :mod:`pickle` modules. ::
 
-   .tp_basicsize = sizeof(CustomObject),
-   .tp_itemsize = 0,
+   sizeof(CustomObject),
+   0,
 
 This is so that Python knows how much memory to allocate when creating
-new :class:`Custom` instances.  :c:member:`~PyTypeObject.tp_itemsize` is
+new :class:`Custom` instances.  :c:member:`~PyType_Spec.itemsize` is
 only used for variable-sized objects and should otherwise be zero.
 
 .. note::
 
    If you want your type to be subclassable from Python, and your type has the same
-   :c:member:`~PyTypeObject.tp_basicsize` as its base type, you may have problems with multiple
+   :c:member:`~PyType_Spec.basicsize` as its base type, you may have problems with multiple
    inheritance.  A Python subclass of your type will have to list your type first
    in its :attr:`~class.__bases__`, or else it will not be able to call your type's
    :meth:`__new__` method without getting an error.  You can avoid this problem by
-   ensuring that your type has a larger value for :c:member:`~PyTypeObject.tp_basicsize` than its
+   ensuring that your type has a larger value for :c:member:`~PyType_Spec.tp_basicsize` than its
    base type does.  Most of the time, this will be true anyway, because either your
    base type will be :class:`object`, or else you will be adding data members to
    your base type, and therefore increasing its size.
 
 We set the class flags to :const:`Py_TPFLAGS_DEFAULT`. ::
 
-   .tp_flags = Py_TPFLAGS_DEFAULT,
+   Py_TPFLAGS_DEFAULT,
 
 All types should include this constant in their flags.  It enables all of the
 members defined until at least Python 3.3.  If you need further members,
 you will need to OR the corresponding flags.
 
-We provide a doc string for the type in :c:member:`~PyTypeObject.tp_doc`. ::
+The rest of the type information was to be included as part of the type slots::
 
-   .tp_doc = "Custom objects",
+   CustomType_slots,
 
-To enable object creation, we have to provide a :c:member:`~PyTypeObject.tp_new`
-handler.  This is the equivalent of the Python method :meth:`__new__`, but
-has to be specified explicitly.  In this case, we can just use the default
-implementation provided by the API function :c:func:`PyType_GenericNew`. ::
+We provide a doc string for the type in the doc type slot. ::
 
-   .tp_new = PyType_GenericNew,
+   {Py_tp_doc, CustomType_doc},
+
+To enable object creation, we have to provide a ``Py_tp_new`` type slot.
+This is the equivalent of the Python method :meth:`__new__`, but has to be
+specified explicitly.  In this case, we can just use the default implementation
+provided by the API function :c:func:`PyType_GenericNew`. ::
+
+   {Py_tp_new, PyType_GenericNew},
 
 Everything else in the file should be familiar, except for some code in
 :c:func:`PyInit_custom`::
 
-   if (PyType_Ready(&CustomType) < 0)
-       return;
+   CustomType = PyType_FromSpec(&CustomType_spec);
+   if (CustomType == NULL) {
+       PY_DECREF(m);
+       return NULL;
+   }
 
-This initializes the :class:`Custom` type, filling in a number of members
-to the appropriate default values, including :attr:`ob_type` that we initially
-set to *NULL*. ::
+This initializes the :class:`Custom` type, filling in the rest of slots to its
+default values. ::
 
    Py_INCREF(&CustomType);
-   if (PyModule_AddObject(m, "Custom", (PyObject *) &CustomType) < 0) {
-       Py_DECREF(&CustomType);
+   if (PyModule_AddObject(m, "Custom", (PyObject *) CustomType) < 0) {
+       Py_DECREF(CustomType);
        PY_DECREF(m);
        return NULL;
    }
@@ -264,32 +254,29 @@ allocation and deallocation.  At a minimum, we need a deallocation method::
    static void
    Custom_dealloc(CustomObject *self)
    {
+       PyTypeObject *type = Py_TYPE(self);
        Py_XDECREF(self->first);
        Py_XDECREF(self->last);
-       Py_TYPE(self)->tp_free((PyObject *) self);
+       freefunc free_func = (freefunc) PyType_GetSlot(type, Py_tp_free);
+       free_func((PyObject *) self);
+       Py_DECREF(type);
    }
 
-which is assigned to the :c:member:`~PyTypeObject.tp_dealloc` member::
+which is assigned to the ``Py_tp_dealloc`` type slot::
 
-   .tp_dealloc = (destructor) Custom_dealloc,
+   {Py_tp_dealloc, Custom_dealloc},
 
-This method first clears the reference counts of the two Python attributes.
-:c:func:`Py_XDECREF` correctly handles the case where its argument is
-*NULL* (which might happen here if ``tp_new`` failed midway).  It then
-calls the :c:member:`~PyTypeObject.tp_free` member of the object's type
-(computed by ``Py_TYPE(self)``) to free the object's memory.  Note that
-the object's type might not be :class:`CustomType`, because the object may
-be an instance of a subclass.
-
-.. note::
-   The explicit cast to ``destructor`` above is needed because we defined
-   ``Custom_dealloc`` to take a ``CustomObject *`` argument, but the ``tp_dealloc``
-   function pointer expects to receive a ``PyObject *`` argument.  Otherwise,
-   the compiler will emit a warning.  This is object-oriented polymorphism,
-   in C!
+This method first pulls out a reference to the object's type (computed by
+``Py_TYPE(self)``). Then it clears the reference counts of the two Python
+attributes. :c:func:`Py_XDECREF` correctly handles the case where its argument
+is *NULL* (which might happen here if ``PyUnicode_FromString`` failed midway).
+It then calls the ``Py_tp_free`` slot of the object's type to free the object's
+memory. Note that the object's type might not be :class:`CustomType`, because
+the object may be an instance of a subclass. Finally, it decreases the reference
+count of the instance referents.
 
 We want to make sure that the first and last names are initialized to empty
-strings, so we provide a ``tp_new`` implementation::
+strings, so we provide a ``Py_tp_new`` implementation::
 
    static PyObject *
    Custom_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
@@ -312,53 +299,55 @@ strings, so we provide a ``tp_new`` implementation::
        return (PyObject *) self;
    }
 
-and install it in the :c:member:`~PyTypeObject.tp_new` member::
+and install it in the :c:member:``Py_tp_new`` type slot::
 
-   .tp_new = Custom_new,
+   {Py_tp_new, Custom_new},
 
-The ``tp_new`` handler is responsible for creating (as opposed to initializing)
+The ``Py_tp_new`` slot is responsible for creating (as opposed to initializing)
 objects of the type.  It is exposed in Python as the :meth:`__new__` method.
-It is not required to define a ``tp_new`` member, and indeed many extension
+It is not required to define a ``Py_tp_new`` member, and indeed many extension
 types will simply reuse :c:func:`PyType_GenericNew` as done in the first
-version of the ``Custom`` type above.  In this case, we use the ``tp_new``
-handler to initialize the ``first`` and ``last`` attributes to non-*NULL*
+version of the ``Custom`` type above.  In this case, we use the ``Py_tp_new``
+slot to initialize the ``first`` and ``last`` attributes to non-*NULL*
 default values.
 
-``tp_new`` is passed the type being instantiated (not necessarily ``CustomType``,
-if a subclass is instantiated) and any arguments passed when the type was
-called, and is expected to return the instance created.  ``tp_new`` handlers
-always accept positional and keyword arguments, but they often ignore the
-arguments, leaving the argument handling to initializer (a.k.a. ``tp_init``
-in C or ``__init__`` in Python) methods.
+``Py_tp_new`` is passed the type being instantiated (not necessarily
+``CustomType``, if a subclass is instantiated) and any arguments passed when
+the type was called, and is expected to return the instance created.
+``Py_tp_new`` slots always accept positional and keyword arguments, but they
+often ignore the arguments, leaving the argument handling to initializer
+(a.k.a. ``Py_tp_init`` in C or ``__init__`` in Python) methods.
 
 .. note::
-   ``tp_new`` shouldn't call ``tp_init`` explicitly, as the interpreter
+   ``Py_tp_new`` shouldn't call ``Py_tp_init`` explicitly, as the interpreter
    will do it itself.
 
-The ``tp_new`` implementation calls the :c:member:`~PyTypeObject.tp_alloc`
-slot to allocate memory::
+The ``Py_tp_new`` implementation calls the ``Py_tp_alloc`` type slot to
+allocate memory::
 
-   self = (CustomObject *) type->tp_alloc(type, 0);
+   allocfunc alloc_func = (allocfunc)PyType_GetSlot(type, Py_tp_alloc);
+   self = (CustomObject *) alloc_func(type, 0);
 
-Since memory allocation may fail, we must check the :c:member:`~PyTypeObject.tp_alloc`
-result against *NULL* before proceeding.
+Since memory allocation may fail, we must check the ``Py_tp_alloc`` result
+against *NULL* before proceeding.
 
 .. note::
-   We didn't fill the :c:member:`~PyTypeObject.tp_alloc` slot ourselves. Rather
-   :c:func:`PyType_Ready` fills it for us by inheriting it from our base class,
+   We didn't fill the `Py_tp_alloc` slot ourselves. Rather
+   :c:func:`PyType_FromSpec` fills it for us by inheriting it from our base class,
    which is :class:`object` by default.  Most types use the default allocation
    strategy.
 
 .. note::
-   If you are creating a co-operative :c:member:`~PyTypeObject.tp_new` (one
-   that calls a base type's :c:member:`~PyTypeObject.tp_new` or :meth:`__new__`),
-   you must *not* try to determine what method to call using method resolution
-   order at runtime.  Always statically determine what type you are going to
-   call, and call its :c:member:`~PyTypeObject.tp_new` directly, or via
-   ``type->tp_base->tp_new``.  If you do not do this, Python subclasses of your
-   type that also inherit from other Python-defined classes may not work correctly.
-   (Specifically, you may not be able to create instances of such subclasses
-   without getting a :exc:`TypeError`.)
+   If you are creating a co-operative ``Py_tp_new`` (one that calls a base
+   type's ``Py_tp_new`` or :meth:`__new__`), you must *not* try to determine
+   what method to call using method resolution order at runtime.  Always
+   statically determine what type you are going to
+   call, and call its ``Py_tp_new`` directly, or via
+   ``PyType_GetSlot(PyType_GetSlot(type, Py_tp_base), Py_tp_new)``.  If you do
+   not do this, Python subclasses of your type that also inherit from other
+   Python-defined classes may not work correctly. (Specifically, you may not be
+   able to create instances of such subclasses without getting a
+   :exc:`TypeError`.)
 
 We also define an initialization function which accepts arguments to provide
 initial values for our instance::
@@ -389,16 +378,16 @@ initial values for our instance::
        return 0;
    }
 
-by filling the :c:member:`~PyTypeObject.tp_init` slot. ::
+by filling the :c:member:``Py_tp_init`` slot. ::
 
-   .tp_init = (initproc) Custom_init,
+   {Py_tp_init, Custom_init},
 
-The :c:member:`~PyTypeObject.tp_init` slot is exposed in Python as the
-:meth:`__init__` method.  It is used to initialize an object after it's
-created.  Initializers always accept positional and keyword arguments,
-and they should return either ``0`` on success or ``-1`` on error.
+The ``Py_tp_init`` slot is exposed in Python as the :meth:`__init__` method.
+It is used to initialize an object after it's created.  Initializers always
+accept positional and keyword arguments, and they should return either ``0``
+on success or ``-1`` on error.
 
-Unlike the ``tp_new`` handler, there is no guarantee that ``tp_init``
+Unlike the ``Py_tp_new`` slot, there is no guarantee that ``Py_tp_init``
 is called at all (for example, the :mod:`pickle` module by default
 doesn't call :meth:`__init__` on unpickled instances).  It can also be
 called multiple times.  Anyone can call the :meth:`__init__` method on
@@ -428,8 +417,8 @@ don't we have to do this?
 * when we know that deallocation of the object [#]_ will neither release
   the :term:`GIL` nor cause any calls back into our type's code;
 
-* when decrementing a reference count in a :c:member:`~PyTypeObject.tp_dealloc`
-  handler on a type which doesn't support cyclic garbage collection [#]_.
+* when decrementing a reference count in a ``Py_tp_dealloc`` type slot
+  on a type which doesn't support cyclic garbage collection [#]_.
 
 We want to expose our instance variables as attributes. There are a
 number of ways to do that. The simplest way is to define member definitions::
@@ -444,9 +433,9 @@ number of ways to do that. The simplest way is to define member definitions::
        {NULL}  /* Sentinel */
    };
 
-and put the definitions in the :c:member:`~PyTypeObject.tp_members` slot::
+and put the definitions in the ``Py_tp_members`` slot::
 
-   .tp_members = Custom_members,
+   {Py_tp_members, Custom_members},
 
 Each member definition has a member name, type, offset, access flags and
 documentation string.  See the :ref:`Generic-Attribute-Management` section
@@ -507,20 +496,20 @@ definitions::
 (note that we used the :const:`METH_NOARGS` flag to indicate that the method
 is expecting no arguments other than *self*)
 
-and assign it to the :c:member:`~PyTypeObject.tp_methods` slot::
+and assign it to the ``Py_tp_methods`` slot::
 
-   .tp_methods = Custom_methods,
+   {Py_tp_methods, Custom_methods},
 
 Finally, we'll make our type usable as a base class for subclassing.  We've
 written our methods carefully so far so that they don't make any assumptions
 about the type of the object being created or used, so all we need to do is
-to add the :const:`Py_TPFLAGS_BASETYPE` to our class flag definition::
+to add the :const:`Py_TPFLAGS_BASETYPE` to the type's spec::
 
-   .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+   Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
 
 We rename :c:func:`PyInit_custom` to :c:func:`PyInit_custom2`, update the
 module name in the :c:type:`PyModuleDef` struct, and update the full class
-name in the :c:type:`PyTypeObject` struct.
+name in the :c:type:`PyType_Spec` struct.
 
 Finally, we update our :file:`setup.py` file to build the new module:
 

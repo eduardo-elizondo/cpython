@@ -6,17 +6,22 @@ typedef struct {
     /* Type-specific fields go here. */
 } CustomObject;
 
-static PyTypeObject CustomType = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name = "custom.Custom",
-    .tp_doc = "Custom objects",
-    .tp_basicsize = sizeof(CustomObject),
-    .tp_itemsize = 0,
-    .tp_flags = Py_TPFLAGS_DEFAULT,
-    .tp_new = PyType_GenericNew,
+PyDoc_STRVAR(CustomType_doc, "Custom objects");
+
+static PyType_Slot CustomType_slots[] = {
+    {Py_tp_doc, CustomType_doc},
+    {Py_tp_new, PyType_GenericNew},
+}
+
+static PyType_Spec CustomType_spec = {
+    "custom.Custom",
+    sizeof(CustomObject),
+    0,
+    Py_TPFLAGS_DEFAULT,
+    CustomType_slots,
 };
 
-static PyModuleDef custommodule = {
+static struct PyModuleDef custommodule = {
     PyModuleDef_HEAD_INIT,
     .m_name = "custom",
     .m_doc = "Example module that creates an extension type.",
@@ -26,17 +31,22 @@ static PyModuleDef custommodule = {
 PyMODINIT_FUNC
 PyInit_custom(void)
 {
-    PyObject *m;
-    if (PyType_Ready(&CustomType) < 0)
-        return NULL;
+    PyObject *m, CustomType;
 
     m = PyModule_Create(&custommodule);
-    if (m == NULL)
+    if (m == NULL) {
         return NULL;
+    }
 
-    Py_INCREF(&CustomType);
-    if (PyModule_AddObject(m, "Custom", (PyObject *) &CustomType) < 0) {
-        Py_DECREF(&CustomType);
+    CustomType = PyType_FromSpec(&CustomType_spec);
+    if (CustomType == NULL) {
+        PY_DECREF(m);
+        return NULL;
+    }
+
+    Py_INCREF(CustomType);
+    if (PyModule_AddObject(m, "Custom", CustomType) < 0) {
+        Py_DECREF(CustomType);
         PY_DECREF(m);
         return NULL;
     }
