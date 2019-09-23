@@ -204,26 +204,29 @@ value must be in a particular range or must satisfy other conditions,
 :c:data:`PyExc_ValueError` is appropriate.
 
 You can also define a new exception that is unique to your module. For this, you
-usually declare a static object variable at the beginning of your file::
-
-   static PyObject *SpamError;
-
-and initialize it in your module's initialization function (:c:func:`PyInit_spam`)
-with an exception object::
+store the exception in the module's state (more on module states later in
+sample), and initialize it through the module's initilaization function
+(:c:func:`PyInit_spam`) with an exception object::
 
    PyMODINIT_FUNC
    PyInit_spam(void)
    {
-       PyObject *m;
+       PyObject *m, *SpamError;
 
        m = PyModule_Create(&spammodule);
        if (m == NULL)
            return NULL;
 
        SpamError = PyErr_NewException("spam.error", NULL, NULL);
-       Py_XINCREF(SpamError);
+       if (SpamError == NULL) {
+           Py_DECREF(m);
+           return NULL;
+       }
+       spam_state(m)->SpamError = SpamError;
+
+       Py_INCREF(SpamError);
        if (PyModule_AddObject(m, "error", SpamError) < 0) {
-           Py_XDECREF(SpamError);
+           Py_DECREF(SpamError);
            Py_CLEAR(SpamError);
            Py_DECREF(m);
            return NULL;
@@ -251,7 +254,7 @@ The :exc:`spam.error` exception can be raised in your extension module using a
 call to :c:func:`PyErr_SetString` as shown below::
 
    static PyObject *
-   spam_system(PyObject *self, PyObject *args)
+   spam_system(PyObject *m, PyObject *args)
    {
        const char *command;
        int sts;
@@ -260,7 +263,7 @@ call to :c:func:`PyErr_SetString` as shown below::
            return NULL;
        sts = system(command);
        if (sts < 0) {
-           PyErr_SetString(SpamError, "System command failed");
+           PyErr_SetString(spam_state(m)->SpamError, "System command failed");
            return NULL;
        }
        return PyLong_FromLong(sts);
@@ -312,6 +315,63 @@ genuine Python object rather than a *NULL* pointer, which means "error" in most
 contexts, as we have seen.
 
 
+.. _modulestate:
+
+The Module's State
+==================
+
+An extension may declare a module state which can be used to share data within
+that extension. The previous example uses it to store the ``SpamError``
+exception created at module initialization time. You could then access
+``SpamError`` from any module or type function call by pulling it from the
+module state.
+
+To create a module state, you first need to specify which data it will contain.
+Typically, this will be a ``PyObject *`` but it can contain any data type::
+
+   typedef struct {
+       PyObject *SpamError;
+   } spam_state;
+
+
+You can then get the state from anywhere in the extension using
+:c:type:`PyModule_GetState` if the module is readily avilable. Otherwise, you
+first need to get the module :c:type:`PyState_FindModule`. To avoid repeating
+this access pattern, you could create the following helper macros::
+
+   static struct PyModuleDef spammodule;  /* Forward declare */
+   #define spam_state(o) ((spam_state *)PyModule_GetState(o))
+   #define spam_state_global ((spam_state *)spam_state(PyState_FindModule(&spammodule)));
+
+To avoid leaking data, you have to implement a set of three extra functions
+which get used by the GC to clean up all the data that has been set in the
+module state::
+
+   static int
+   spammodule_traverse(PyObject m, visitproc visit, void *arg)
+   {
+       Py_VISIT(spam_state(m)->SpamError);
+       return 0;
+   }
+
+   static int
+   spammodule_clear(PyObject *m)
+   {
+       Py_CLEAR(spam_state(m)->SpamError);
+       return 0;
+   }
+
+   static void
+   spammodule_free(PyObject *m)
+   {
+       spammodule_clear(m);
+   }
+
+Finally, update the extension's :c:type:`PyMethodDef` and set the state size as
+well as the traverse, clear, and free functions. Read the next section to see
+the fully initialized ``spammodule``.
+
+
 .. _methodtable:
 
 The Module's Method Table and Initialization Function
@@ -347,11 +407,19 @@ The method table must be referenced in the module definition structure::
 
    static struct PyModuleDef spammodule = {
        PyModuleDef_HEAD_INIT,
-       "spam",   /* name of module */
-       spam_doc, /* module documentation, may be NULL */
-       -1,       /* size of per-interpreter state of the module,
-                    or -1 if the module keeps state in global variables. */
-       SpamMethods
+       "spam",              /* name of module */
+       spam_doc,            /* module documentation, may be NULL */
+       sizeof(spam_state),  /* size of per-interpreter state of the module,
+                               or -1 if it holds no state */
+       SpamMethods,         /* The module's method table */
+       NULL,                /* multi-phase initialization function table
+                               or NULL if initialized in PyInit */
+       spammodule_traverse, /* A GC traversal function for the objects in the
+                               module's state or NULL if no state */
+       spammodule_clear,    /* A function called by the GC to clear the objects
+                               in the module state or NULL if no state */
+       spammodule_free,     /* The module's deallocation function
+                               or NULL if no state */
    };
 
 This structure, in turn, must be passed to the interpreter in the module's
@@ -493,26 +561,25 @@ look at the implementation of the :option:`-c` command line option in
 Calling a Python function is easy.  First, the Python program must somehow pass
 you the Python function object.  You should provide a function (or some other
 interface) to do this.  When this function is called, save a pointer to the
-Python function object (be careful to :c:func:`Py_INCREF` it!) in a global
-variable --- or wherever you see fit. For example, the following function might
-be part of a module definition::
-
-   static PyObject *my_callback = NULL;
+Python function object (be careful to :c:func:`Py_INCREF` it!) in the module
+state. For example, the following function might be part of a module definition::
 
    static PyObject *
    my_set_callback(PyObject *dummy, PyObject *args)
    {
        PyObject *result = NULL;
-       PyObject *temp;
+       PyObject *temp, *m;
+       modulestate *state;
 
+       state = (modulestate *)PyModule_GetState(PyState_FindModule(&custommodule));
        if (PyArg_ParseTuple(args, "O:set_callback", &temp)) {
            if (!PyCallable_Check(temp)) {
                PyErr_SetString(PyExc_TypeError, "parameter must be callable");
                return NULL;
            }
-           Py_XINCREF(temp);         /* Add a reference to new callback */
-           Py_XDECREF(my_callback);  /* Dispose of previous callback */
-           my_callback = temp;       /* Remember new callback */
+           Py_XINCREF(temp);                /* Add a reference to new callback */
+           Py_XDECREF(state->my_callback);  /* Dispose of previous callback */
+           state->my_callback = temp;       /* Remember new callback */
            /* Boilerplate to return "None" */
            Py_INCREF(Py_None);
            result = Py_None;
@@ -523,7 +590,7 @@ be part of a module definition::
 This function must be registered with the interpreter using the
 :const:`METH_VARARGS` flag; this is described in section :ref:`methodtable`.  The
 :c:func:`PyArg_ParseTuple` function and its arguments are documented in section
-:ref:`parsetuple`.
+:ref:`parsetuple`. The module state is documented in section :ref:`modulestate`.
 
 The macros :c:func:`Py_XINCREF` and :c:func:`Py_XDECREF` increment/decrement the
 reference count of an object and are safe in the presence of *NULL* pointers
@@ -544,12 +611,13 @@ or more format codes between parentheses.  For example::
    int arg;
    PyObject *arglist;
    PyObject *result;
+   modulestate *state;
    ...
    arg = 123;
    ...
    /* Time to call the callback */
    arglist = Py_BuildValue("(i)", arg);
-   result = PyObject_CallObject(my_callback, arglist);
+   result = PyObject_CallObject(state->my_callback, arglist);
    Py_DECREF(arglist);
 
 :c:func:`PyObject_CallObject` returns a Python object pointer: this is the return
@@ -1254,18 +1322,20 @@ function must take care of initializing the C API pointer array::
    PyInit_spam(void)
    {
        PyObject *m;
-       static void *PySpam_API[PySpam_API_pointers];
+       modulestate *state;
+       void *PySpam_API[PySpam_API_pointers];
        PyObject *c_api_object;
 
        m = PyModule_Create(&spammodule);
        if (m == NULL)
            return NULL;
+       state = (modulestate *)PyModule_GetState(m);
 
        /* Initialize the C API pointer array */
-       PySpam_API[PySpam_System_NUM] = (void *)PySpam_System;
+       state->PySpam_API[PySpam_System_NUM] = (void *)PySpam_System;
 
        /* Create a Capsule containing the API pointer array's address */
-       c_api_object = PyCapsule_New((void *)PySpam_API, "spam._C_API", NULL);
+       c_api_object = PyCapsule_New((void *)state->PySpam_API, "spam._C_API", NULL);
 
        if (PyModule_AddObject(m, "_C_API", c_api_object) < 0) {
            Py_XDECREF(c_api_object);
@@ -1275,9 +1345,6 @@ function must take care of initializing the C API pointer array::
 
        return m;
    }
-
-Note that ``PySpam_API`` is declared ``static``; otherwise the pointer
-array would disappear when :func:`PyInit_spam` terminates!
 
 The bulk of the work is in the header file :file:`spammodule.h`, which looks
 like this::
