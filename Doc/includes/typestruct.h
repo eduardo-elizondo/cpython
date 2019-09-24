@@ -1,80 +1,114 @@
-typedef struct _typeobject {
-    PyObject_VAR_HEAD
-    const char *tp_name; /* For printing, in format "<module>.<name>" */
-    Py_ssize_t tp_basicsize, tp_itemsize; /* For allocation */
+typedef struct{
+    /* For printing, in format "<module>.<name>" */
+    const char* name;
 
-    /* Methods to implement standard operations */
-
-    destructor tp_dealloc;
-    Py_ssize_t tp_vectorcall_offset;
-    getattrfunc tp_getattr;
-    setattrfunc tp_setattr;
-    PyAsyncMethods *tp_as_async; /* formerly known as tp_compare (Python 2)
-                                    or tp_reserved (Python 3) */
-    reprfunc tp_repr;
-
-    /* Method suites for standard classes */
-
-    PyNumberMethods *tp_as_number;
-    PySequenceMethods *tp_as_sequence;
-    PyMappingMethods *tp_as_mapping;
-
-    /* More standard operations (here for binary compatibility) */
-
-    hashfunc tp_hash;
-    ternaryfunc tp_call;
-    reprfunc tp_str;
-    getattrofunc tp_getattro;
-    setattrofunc tp_setattro;
-
-    /* Functions to access object as input/output buffer */
-    PyBufferProcs *tp_as_buffer;
+    /* For allocation */
+    int basicsize;
+    int itemsize;
 
     /* Flags to define presence of optional/expanded features */
-    unsigned long tp_flags;
+    unsigned int flags;
 
-    const char *tp_doc; /* Documentation string */
+    /* For defining all the function slots in the type */
+    PyType_Slot *slots;
+} PyType_Spec;
 
-    /* call function for all accessible objects */
-    traverseproc tp_traverse;
+typedef struct{
+    /* The slot identifier, in the form "Py_<slot_name>" */
+    int slot;
 
-    /* delete references to contained objects */
-    inquiry tp_clear;
+    /* The function pointer */
+    void *pfunc;
+} PyType_Slot;
 
-    /* rich comparisons */
-    richcmpfunc tp_richcompare;
+/* Type Slot List: */
 
-    /* weak reference enabler */
-    Py_ssize_t tp_weaklistoffset;
+/* Documentation string */
+Py_tp_doc
 
-    /* Iterators */
-    getiterfunc tp_iter;
-    iternextfunc tp_iternext;
+/* Methods to implement standard operations */
+Py_tp_alloc
+Py_tp_base
+Py_tp_bases
+Py_tp_call
+Py_tp_clear
+Py_tp_dealloc
+Py_tp_del
+Py_tp_descr_get
+Py_tp_descr_set
+Py_tp_finalize
+Py_tp_free
+Py_tp_getattr
+Py_tp_getattro
+Py_tp_getset
+Py_tp_hash
+Py_tp_init
+Py_tp_is_gc
+Py_tp_iter
+Py_tp_iternext
+Py_tp_members
+Py_tp_methods
+Py_tp_new
+Py_tp_repr
+Py_tp_richcompare
+Py_tp_setattr
+Py_tp_setattro
+Py_tp_str
+Py_tp_traverse
 
-    /* Attribute descriptor and subclassing stuff */
-    struct PyMethodDef *tp_methods;
-    struct PyMemberDef *tp_members;
-    struct PyGetSetDef *tp_getset;
-    struct _typeobject *tp_base;
-    PyObject *tp_dict;
-    descrgetfunc tp_descr_get;
-    descrsetfunc tp_descr_set;
-    Py_ssize_t tp_dictoffset;
-    initproc tp_init;
-    allocfunc tp_alloc;
-    newfunc tp_new;
-    freefunc tp_free; /* Low-level free-memory routine */
-    inquiry tp_is_gc; /* For PyObject_IS_GC */
-    PyObject *tp_bases;
-    PyObject *tp_mro; /* method resolution order */
-    PyObject *tp_cache;
-    PyObject *tp_subclasses;
-    PyObject *tp_weaklist;
-    destructor tp_del;
+/* Mapping methods */
+Py_mp_ass_subscript
+Py_mp_length
+Py_mp_subscript
 
-    /* Type attribute cache version tag. Added in version 2.6 */
-    unsigned int tp_version_tag;
+/* Number methods */
+Py_nb_absolute
+Py_nb_add
+Py_nb_and
+Py_nb_bool
+Py_nb_divmod
+Py_nb_float
+Py_nb_floor_divide
+Py_nb_index
+Py_nb_inplace_add
+Py_nb_inplace_and
+Py_nb_inplace_floor_divide
+Py_nb_inplace_lshift
+Py_nb_inplace_matrix_multiply
+Py_nb_inplace_multiply
+Py_nb_inplace_or
+Py_nb_inplace_power
+Py_nb_inplace_remainder
+Py_nb_inplace_rshift
+Py_nb_inplace_subtract
+Py_nb_inplace_true_divide
+Py_nb_inplace_xor
+Py_nb_int
+Py_nb_invert
+Py_nb_lshift
+Py_nb_matrix_multiply
+Py_nb_multiply
+Py_nb_negative
+Py_nb_or
+Py_nb_positive
+Py_nb_power
+Py_nb_remainder
+Py_nb_rshift
+Py_nb_subtract
+Py_nb_true_divide
+Py_nb_xor
 
-    destructor tp_finalize;
+/* Sequence methods */
+Py_sq_ass_item
+Py_sq_concat
+Py_sq_contains
+Py_sq_inplace_concat
+Py_sq_inplace_repeat
+Py_sq_item
+Py_sq_length
+Py_sq_repeat
 
-} PyTypeObject;
+/* Async methods */
+Py_am_aiter
+Py_am_anext
+Py_am_await

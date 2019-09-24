@@ -11,8 +11,8 @@ Defining Extension Types: Assorted Topics
 This section aims to give a quick fly-by on the various type methods you can
 implement and what they do.
 
-Here is the definition of :c:type:`PyTypeObject`, with some fields only used in
-debug builds omitted:
+Here is the definition of :c:type:`PyType_Spec`, as well as all the slots that
+it can contain:
 
 .. literalinclude:: ../includes/typestruct.h
 
@@ -28,20 +28,25 @@ impacts the ordering of the fields.  It's often easiest to find an example
 that includes the fields you need and then change the values to suit your new
 type. ::
 
-   const char *tp_name; /* For printing */
+   /* For printing, in format "<module>.<name>" */
+   const char* name;
 
 The name of the type -- as mentioned in the previous chapter, this will appear in
 various places, almost entirely for diagnostic purposes. Try to choose something
 that will be helpful in such a situation! ::
 
-   Py_ssize_t tp_basicsize, tp_itemsize; /* For allocation */
+   /* For allocation */
+   int basicsize;
+   int itemsize;
 
 These fields tell the runtime how much memory to allocate when new objects of
 this type are created.  Python has some built-in support for variable length
-structures (think: strings, tuples) which is where the :c:member:`~PyTypeObject.tp_itemsize` field
-comes in.  This will be dealt with later. ::
+structures (think: strings, tuples) which is where the
+:c:member:`~PyType_Spec.itemsize` field comes in.  This will be dealt with
+later. ::
 
-   const char *tp_doc;
+   /* Documentation string */
+   Py_tp_doc
 
 Here you can put a string (or its address) that you want returned when the
 Python script references ``obj.__doc__`` to retrieve the doc string.
@@ -61,19 +66,23 @@ Finalization and De-allocation
 
 ::
 
-   destructor tp_dealloc;
+   Py_tp_dealloc
 
 This function is called when the reference count of the instance of your type is
 reduced to zero and the Python interpreter wants to reclaim it.  If your type
 has memory to free or other clean-up to perform, you can put it here.  The
-object itself needs to be freed here as well.  Here is an example of this
-function::
+object itself needs to be freed here as well.  Since this is a heap allocated
+type you will have to decrease the reference count of the type as well. Here is
+an example of this function::
 
    static void
    newdatatype_dealloc(newdatatypeobject *obj)
    {
+       PyTypeObject *tp = Py_TYPE(obj);
        free(obj->obj_UnderlyingDatatypePtr);
-       Py_TYPE(obj)->tp_free(obj);
+       freefunc free_func = PyType_GetSlot(tp, Py_tp_free);
+       free_func(obj);
+       Py_DECREF(tp);
    }
 
 .. index::
@@ -98,6 +107,7 @@ done.  This can be done using the :c:func:`PyErr_Fetch` and
        MyObject *self = (MyObject *) obj;
        PyObject *cbresult;
 
+       PyTypeObject *tp = Py_TYPE(obj);
        if (self->my_callback != NULL) {
            PyObject *err_type, *err_value, *err_traceback;
 
@@ -115,22 +125,24 @@ done.  This can be done using the :c:func:`PyErr_Fetch` and
 
            Py_DECREF(self->my_callback);
        }
-       Py_TYPE(obj)->tp_free((PyObject*)self);
+       freefunc free_func = PyType_GetSlot(tp, Py_tp_free);
+       free_func(obj);
+       Py_DECREF(tp);
    }
 
 .. note::
    There are limitations to what you can safely do in a deallocator function.
-   First, if your type supports garbage collection (using :c:member:`~PyTypeObject.tp_traverse`
-   and/or :c:member:`~PyTypeObject.tp_clear`), some of the object's members can have been
-   cleared or finalized by the time :c:member:`~PyTypeObject.tp_dealloc` is called.  Second, in
-   :c:member:`~PyTypeObject.tp_dealloc`, your object is in an unstable state: its reference
+   First, if your type supports garbage collection (using ``Py_tp_traverse``
+   and/or ``Py_tp_clear``), some of the object's members can have been
+   cleared or finalized by the time ``Py_tp_dealloc`` is called.  Second, in
+   ``Py_tp_dealloc``, your object is in an unstable state: its reference
    count is equal to zero.  Any call to a non-trivial object or API (as in the
-   example above) might end up calling :c:member:`~PyTypeObject.tp_dealloc` again, causing a
+   example above) might end up calling ``Py_tp_dealloc`` again, causing a
    double free and a crash.
 
    Starting with Python 3.4, it is recommended not to put any complex
-   finalization code in :c:member:`~PyTypeObject.tp_dealloc`, and instead use the new
-   :c:member:`~PyTypeObject.tp_finalize` type method.
+   finalization code in ``Py_tp_dealloc``, and instead use the new
+   ``Py_tp_finalize`` type method.
 
    .. seealso::
       :pep:`442` explains the new finalization scheme.
@@ -148,10 +160,10 @@ function just calls :func:`str`.)  These handlers are both optional.
 
 ::
 
-   reprfunc tp_repr;
-   reprfunc tp_str;
+   Py_tp_repr
+   Py_tp_str
 
-The :c:member:`~PyTypeObject.tp_repr` handler should return a string object containing a
+The ``Py_tp_repr`` slot should return a string object containing a
 representation of the instance for which it is called.  Here is a simple
 example::
 
@@ -162,15 +174,15 @@ example::
                                    obj->obj_UnderlyingDatatypePtr->size);
    }
 
-If no :c:member:`~PyTypeObject.tp_repr` handler is specified, the interpreter will supply a
-representation that uses the type's :c:member:`~PyTypeObject.tp_name` and a uniquely-identifying
+If no ``Py_tp_repr`` slot is specified, the interpreter will supply a
+representation that uses the type's ``Py_tp_name`` and a uniquely-identifying
 value for the object.
 
-The :c:member:`~PyTypeObject.tp_str` handler is to :func:`str` what the :c:member:`~PyTypeObject.tp_repr` handler
+The ``Py_tp_str`` slot is to :func:`str` what the ``Py_tp_repr`` slot
 described above is to :func:`repr`; that is, it is called when Python code calls
 :func:`str` on an instance of your object.  Its implementation is very similar
-to the :c:member:`~PyTypeObject.tp_repr` function, but the resulting string is intended for human
-consumption.  If :c:member:`~PyTypeObject.tp_str` is not specified, the :c:member:`~PyTypeObject.tp_repr` handler is
+to the ``Py_tp_repr`` function, but the resulting string is intended for human
+consumption.  If ``Py_tp_str`` is not specified, the ``Py_tp_repr`` slot is
 used instead.
 
 Here is a simple example::
@@ -199,11 +211,13 @@ pair takes the name of the attribute as a :c:type:`char\*`, while the other
 accepts a :c:type:`PyObject\*`.  Each type can use whichever pair makes more
 sense for the implementation's convenience. ::
 
-   getattrfunc  tp_getattr;        /* char * version */
-   setattrfunc  tp_setattr;
-   /* ... */
-   getattrofunc tp_getattro;       /* PyObject * version */
-   setattrofunc tp_setattro;
+   /* char * version */
+   Py_tp_getattr
+   Py_tp_setattr
+
+   /* PyObject * version */
+   Py_tp_getattro;
+   Py_tp_setattro
 
 If accessing attributes of an object is always a simple operation (this will be
 explained shortly), there are generic implementations which can be used to
@@ -221,7 +235,7 @@ Generic Attribute Management
 Most extension types only use *simple* attributes.  So, what makes the
 attributes simple?  There are only a couple of conditions that must be met:
 
-#. The name of the attributes must be known when :c:func:`PyType_Ready` is
+#. The name of the attributes must be known when :c:func:`PyType_FromSpec` is
    called.
 
 #. No special processing is needed to record that an attribute was looked up or
@@ -230,21 +244,21 @@ attributes simple?  There are only a couple of conditions that must be met:
 Note that this list does not place any restrictions on the values of the
 attributes, when the values are computed, or how relevant data is stored.
 
-When :c:func:`PyType_Ready` is called, it uses three tables referenced by the
-type object to create :term:`descriptor`\s which are placed in the dictionary of the
-type object.  Each descriptor controls access to one attribute of the instance
-object.  Each of the tables is optional; if all three are *NULL*, instances of
+When :c:func:`PyType_FromSpec` is called, it uses three tables referenced by the
+type object to create :term:`descriptor`\s which are placed in the dictionary of
+the type object.  Each descriptor controls access to one attribute of the instance
+object.  Each of the tables is optional; if all three are not set, instances of
 the type will only have attributes that are inherited from their base type, and
-should leave the :c:member:`~PyTypeObject.tp_getattro` and :c:member:`~PyTypeObject.tp_setattro` fields *NULL* as
-well, allowing the base type to handle attributes.
+should leave the ``Py_tp_getattro`` and ``Py_tp_setattro`` slots to *NULL*, allowing
+the base type to handle attributes.
 
 The tables are declared as three fields of the type object::
 
-   struct PyMethodDef *tp_methods;
-   struct PyMemberDef *tp_members;
-   struct PyGetSetDef *tp_getset;
+   Py_tp_methods
+   Py_tp_members
+   Py_tp_getset
 
-If :c:member:`~PyTypeObject.tp_methods` is not *NULL*, it must refer to an array of
+If ``Py_tp_methods`` is set, it must refer to an array of
 :c:type:`PyMethodDef` structures.  Each entry in the table is an instance of this
 structure::
 
@@ -300,13 +314,13 @@ combined using bitwise-OR.
    single: WRITE_RESTRICTED
    single: RESTRICTED
 
-An interesting advantage of using the :c:member:`~PyTypeObject.tp_members` table to build
+An interesting advantage of using the ``Py_tp_members`` table to build
 descriptors that are used at runtime is that any attribute defined this way can
 have an associated doc string simply by providing the text in the table.  An
 application can use the introspection API to retrieve the descriptor from the
 class object, and get the doc string using its :attr:`__doc__` attribute.
 
-As with the :c:member:`~PyTypeObject.tp_methods` table, a sentinel entry with a :attr:`name` value
+As with the ``Py_tp_methods`` table, a sentinel entry with a :attr:`name` value
 of *NULL* is required.
 
 .. XXX Descriptors need to be explained in more detail somewhere, but not here.
@@ -330,7 +344,7 @@ support added in Python 2.2.  It explains how the handler functions are
 called, so that if you do need to extend their functionality, you'll understand
 what needs to be done.
 
-The :c:member:`~PyTypeObject.tp_getattr` handler is called when the object requires an attribute
+The ``Py_tp_getattr`` slot is called when the object requires an attribute
 look-up.  It is called in the same situations where the :meth:`__getattr__`
 method of a class would be called.
 
@@ -346,15 +360,15 @@ Here is an example::
 
        PyErr_Format(PyExc_AttributeError,
                     "'%.50s' object has no attribute '%.400s'",
-                    tp->tp_name, name);
+                    _PyType_Name(Py_TYPE(obj)), name);
        return NULL;
    }
 
-The :c:member:`~PyTypeObject.tp_setattr` handler is called when the :meth:`__setattr__` or
+The ``Py_tp_setattr`` slot is called when the :meth:`__setattr__` or
 :meth:`__delattr__` method of a class instance would be called.  When an
 attribute should be deleted, the third parameter will be *NULL*.  Here is an
 example that simply raises an exception; if this were really all you wanted, the
-:c:member:`~PyTypeObject.tp_setattr` handler should be set to *NULL*. ::
+``Py_tp_setattr`` slot should be left unset. ::
 
    static int
    newdatatype_setattr(newdatatypeobject *obj, char *name, PyObject *v)
@@ -368,9 +382,9 @@ Object Comparison
 
 ::
 
-   richcmpfunc tp_richcompare;
+   Py_tp_richcompare;
 
-The :c:member:`~PyTypeObject.tp_richcompare` handler is called when comparisons are needed.  It is
+The ``Py_tp_richcompare`` slot is called when comparisons are needed.  It is
 analogous to the :ref:`rich comparison methods <richcmpfuncs>`, like
 :meth:`__lt__`, and also called by :c:func:`PyObject_RichCompare` and
 :c:func:`PyObject_RichCompareBool`.
@@ -422,26 +436,27 @@ provided to use these interfaces are documented in :ref:`abstract`.
 A number of these abstract interfaces were defined early in the development of
 the Python implementation.  In particular, the number, mapping, and sequence
 protocols have been part of Python since the beginning.  Other protocols have
-been added over time.  For protocols which depend on several handler routines
-from the type implementation, the older protocols have been defined as optional
-blocks of handlers referenced by the type object.  For newer protocols there are
-additional slots in the main type object, with a flag bit being set to indicate
+been added over time.  For newer protocols there are type flags that which indicate
 that the slots are present and should be checked by the interpreter.  (The flag
-bit does not indicate that the slot values are non-*NULL*. The flag may be set
+bit does not indicate that the slot values are set. The flag may be set
 to indicate the presence of a slot, but a slot may still be unfilled.) ::
 
-   PyNumberMethods   *tp_as_number;
-   PySequenceMethods *tp_as_sequence;
-   PyMappingMethods  *tp_as_mapping;
+   /* Mapping methods */
+   Py_mp_<name>
+   /* Number methods */
+   Py_nb_<name>
+   /* Sequence methods */
+   Py_sq_<name>
+   /* Async methods */
+   Py_am_<name>
 
-If you wish your object to be able to act like a number, a sequence, or a
-mapping object, then you place the address of a structure that implements the C
-type :c:type:`PyNumberMethods`, :c:type:`PySequenceMethods`, or
-:c:type:`PyMappingMethods`, respectively. It is up to you to fill in this
-structure with appropriate values. You can find examples of the use of each of
-these in the :file:`Objects` directory of the Python source distribution. ::
+If you wish your object to be able to act like a number, a sequence, a
+mapping object, or an async object, you could use the ``Py_nb_<name>``,
+``Py_sq_<name>``, ``Py_mp_<name>``, or ``Py_am_<name>`` respectively. You can
+find examples of the use of each of these in the :file:`Modules` directory of
+the Python source distribution. ::
 
-   hashfunc tp_hash;
+   Py_tp_hash;
 
 This function, if you choose to provide it, should return a hash number for an
 instance of your data type. Here is a simple example::
@@ -457,17 +472,17 @@ instance of your data type. Here is a simple example::
    }
 
 :c:type:`Py_hash_t` is a signed integer type with a platform-varying width.
-Returning ``-1`` from :c:member:`~PyTypeObject.tp_hash` indicates an error,
-which is why you should be careful to avoid returning it when hash computation
-is successful, as seen above.
+Returning ``-1`` from ``Py_tp_hash`` indicates an error, which is why you should
+be careful to avoid returning it when hash computation is successful, as seen
+above.
 
 ::
 
-   ternaryfunc tp_call;
+   Py_tp_call;
 
 This function is called when an instance of your data type is "called", for
 example, if ``obj1`` is an instance of your data type and the Python script
-contains ``obj1('hello')``, the :c:member:`~PyTypeObject.tp_call` handler is invoked.
+contains ``obj1('hello')``, the ``Py_tp_call`` slot is invoked.
 
 This function takes three arguments:
 
@@ -483,7 +498,7 @@ This function takes three arguments:
    do not want to support keyword arguments and this is non-*NULL*, raise a
    :exc:`TypeError` with a message saying that keyword arguments are not supported.
 
-Here is a toy ``tp_call`` implementation::
+Here is a toy ``Py_tp_call`` implementation::
 
    static PyObject *
    newdatatype_call(newdatatypeobject *self, PyObject *args, PyObject *kwds)
@@ -506,39 +521,36 @@ Here is a toy ``tp_call`` implementation::
 ::
 
    /* Iterators */
-   getiterfunc tp_iter;
-   iternextfunc tp_iternext;
+   Py_tp_iter;
+   Py_tp_iternext;
 
 These functions provide support for the iterator protocol.  Both handlers
 take exactly one parameter, the instance for which they are being called,
 and return a new reference.  In the case of an error, they should set an
-exception and return *NULL*.  :c:member:`~PyTypeObject.tp_iter` corresponds
-to the Python :meth:`__iter__` method, while :c:member:`~PyTypeObject.tp_iternext`
+exception and return *NULL*.  ``Py_tp_iter`` corresponds
+to the Python :meth:`__iter__` method, while ``Py_tp_iternext``
 corresponds to the Python :meth:`~iterator.__next__` method.
 
-Any :term:`iterable` object must implement the :c:member:`~PyTypeObject.tp_iter`
+Any :term:`iterable` object must implement the ``Py_tp_iter``
 handler, which must return an :term:`iterator` object.  Here the same guidelines
 apply as for Python classes:
 
 * For collections (such as lists and tuples) which can support multiple
   independent iterators, a new iterator should be created and returned by
-  each call to :c:member:`~PyTypeObject.tp_iter`.
+  each call to ``Py_tp_iter``.
 * Objects which can only be iterated over once (usually due to side effects of
-  iteration, such as file objects) can implement :c:member:`~PyTypeObject.tp_iter`
+  iteration, such as file objects) can implement ``Py_tp_iter``
   by returning a new reference to themselves -- and should also therefore
-  implement the :c:member:`~PyTypeObject.tp_iternext`  handler.
+  implement the ``Py_tp_iternext``  slot.
 
-Any :term:`iterator` object should implement both :c:member:`~PyTypeObject.tp_iter`
-and :c:member:`~PyTypeObject.tp_iternext`.  An iterator's
-:c:member:`~PyTypeObject.tp_iter` handler should return a new reference
-to the iterator.  Its :c:member:`~PyTypeObject.tp_iternext` handler should
-return a new reference to the next object in the iteration, if there is one.
-If the iteration has reached the end, :c:member:`~PyTypeObject.tp_iternext`
-may return *NULL* without setting an exception, or it may set
-:exc:`StopIteration` *in addition* to returning *NULL*; avoiding
-the exception can yield slightly better performance.  If an actual error
-occurs, :c:member:`~PyTypeObject.tp_iternext` should always set an exception
-and return *NULL*.
+Any :term:`iterator` object should implement both ``Py_tp_iter``
+and ``Py_tp_iternext``.  An iterator's ``Py_tp_iter`` slot should return a new
+reference to the iterator.  Its ``Py_tp_iternext`` slot should return a new
+reference to the next object in the iteration, if there is one. If the iteration
+has reached the end, ``Py_tp_iternext`` may return *NULL* without setting an
+exception, or it may set :exc:`StopIteration` *in addition* to returning *NULL*;
+avoiding the exception can yield slightly better performance.  If an actual error
+occurs, ``Py_tp_iternext`` should always set an exception and return *NULL*.
 
 
 .. _weakref-support:
@@ -558,11 +570,12 @@ For an object to be weakly referencable, the extension type must do two things:
 #. Include a :c:type:`PyObject\*` field in the C object structure dedicated to
    the weak reference mechanism.  The object's constructor should leave it
    *NULL* (which is automatic when using the default
-   :c:member:`~PyTypeObject.tp_alloc`).
+   ``Py_tp_alloc``).
 
-#. Set the :c:member:`~PyTypeObject.tp_weaklistoffset` type member
-   to the offset of the aforementioned field in the C object structure,
-   so that the interpreter knows how to access and modify that field.
+#. Set a :c:type:`PyMethodDef` member with name ``__weaklistoffset__``, of type
+   ``T_PYSSIZET``, as ``READONLY``, and to the offset of the aforementioned field
+   in the C object structure, so that the type system knows how to access and
+   modify that field.
 
 Concretely, here is how a trivial object structure would be augmented
 with the required field::
@@ -574,24 +587,26 @@ with the required field::
 
 And the corresponding member in the statically-declared type object::
 
-   static PyTypeObject TrivialType = {
-       PyVarObject_HEAD_INIT(NULL, 0)
-       /* ... other members omitted for brevity ... */
-       .tp_weaklistoffset = offsetof(TrivialObject, weakreflist),
+   static struct PyMemberDef trivialtype_members[] = {
+       {"__weaklistoffset__", T_PYSSIZET, offsetof(TrivialObject, weakreflist), READONLY},
+       {NULL} /* Sentinel */
    };
 
-The only further addition is that ``tp_dealloc`` needs to clear any weak
+The only further addition is that ``Py_tp_dealloc`` needs to clear any weak
 references (by calling :c:func:`PyObject_ClearWeakRefs`) if the field is
 non-*NULL*::
 
    static void
    Trivial_dealloc(TrivialObject *self)
    {
+       PyTypeObject *tp = Py_TYPE(self);
        /* Clear weakrefs first before calling any destructors */
        if (self->weakreflist != NULL)
            PyObject_ClearWeakRefs((PyObject *) self);
        /* ... remainder of destruction code omitted for brevity ... */
-       Py_TYPE(self)->tp_free((PyObject *) self);
+       freefunc free_func = PyType_GetSlot(tp, Py_tp_free);
+       free_func(obj);
+       Py_DECREF(tp);
    }
 
 
@@ -600,15 +615,15 @@ More Suggestions
 
 In order to learn how to implement any specific method for your new data type,
 get the :term:`CPython` source code.  Go to the :file:`Objects` directory,
-then search the C source files for ``tp_`` plus the function you want
-(for example, ``tp_richcompare``).  You will find examples of the function
+then search the C source files for ``Py_{tp|mp|nb|sq|am}_<name>``
+(for example, ``Py_tp_richcompare``).  You will find examples of the function
 you want to implement.
 
 When you need to verify that an object is a concrete instance of the type you
 are implementing, use the :c:func:`PyObject_TypeCheck` function.  A sample of
 its use might be something like the following::
 
-   if (!PyObject_TypeCheck(some_object, &MyType)) {
+   if (!PyObject_TypeCheck(some_object, some_type)) {
        PyErr_SetString(PyExc_TypeError, "arg #1 not a mything");
        return NULL;
    }
