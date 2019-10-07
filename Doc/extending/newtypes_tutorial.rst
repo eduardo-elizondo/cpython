@@ -142,11 +142,11 @@ All types should include this constant in their flags.  It enables all of the
 members defined until at least Python 3.3.  If you need further members,
 you will need to OR the corresponding flags.
 
-The rest of the type information was to be included as part of the type slots::
+Add the rest of the type information through the type's slots::
 
    CustomType_slots,
 
-We provide a doc string for the type in the doc type slot. ::
+We provide a doc string for the type in the ``Py_tp_doc`` slot::
 
    {Py_tp_doc, Custom_doc},
 

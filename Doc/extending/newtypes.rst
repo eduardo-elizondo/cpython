@@ -11,8 +11,8 @@ Defining Extension Types: Assorted Topics
 This section aims to give a quick fly-by on the various type methods you can
 implement and what they do.
 
-Here is the definition of :c:type:`PyType_Spec`, as well as all the slots that
-it can contain:
+Here is the definition of :c:type:`PyType_Spec`, as well as all the different
+type slots:
 
 .. literalinclude:: ../includes/typestruct.h
 
@@ -71,9 +71,9 @@ Finalization and De-allocation
 This function is called when the reference count of the instance of your type is
 reduced to zero and the Python interpreter wants to reclaim it.  If your type
 has memory to free or other clean-up to perform, you can put it here.  The
-object itself needs to be freed here as well.  Since this is a heap allocated
-type you will have to decrease the reference count of the type as well. Here is
-an example of this function::
+object itself needs to be freed here as well. Since this is a heap allocated
+type you will have to decrease the reference count of the type as well. For
+example::
 
    static void
    newdatatype_dealloc(newdatatypeobject *obj)
