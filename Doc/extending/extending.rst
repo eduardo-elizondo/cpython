@@ -22,11 +22,13 @@ your system setup; details are given in later chapters.
 
 .. note::
 
-   In many cases, it is possible to avoid writing C extensions by using
-   python libraries that allow you to interface with the system. For example,
-   if your use case is calling C library functions or system calls, you should
-   consider using the :mod:`ctypes` module or the `cffi
-   <https://cffi.readthedocs.io/>`_ library rather than writing custom C code.
+   The C extension interface is specific to CPython, and extension modules do
+   not work on other Python implementations.  In many cases, it is possible to
+   avoid writing C extensions and preserve portability to other implementations.
+   For example, if your use case is calling C library functions or system calls,
+   you should consider using the :mod:`ctypes` module or the `cffi
+   <https://cffi.readthedocs.io/>`_ library rather than writing
+   custom C code.
    These modules let you write Python code to interface with C code and are more
    portable between implementations of Python than writing and compiling a C
    extension module.
@@ -201,10 +203,10 @@ function usually raises :c:data:`PyExc_TypeError`.  If you have an argument whos
 value must be in a particular range or must satisfy other conditions,
 :c:data:`PyExc_ValueError` is appropriate.
 
-You can also define a new exception that is unique to your module. For this, you
-store the exception in the module's state (more on module states later in
-sample), and initialize it through the module's initilaization function
-(:c:func:`PyInit_spam`) with an exception object::
+You can also define a new exception that is unique to your module.
+Start by creating the exception inside the module initialization function
+(:c:func:`PyInit_spam`). Then, store the exception in the module's state
+(more on module states later in this example).
 
    PyMODINIT_FUNC
    PyInit_spam(void)
@@ -315,35 +317,32 @@ contexts, as we have seen.
 
 .. _modulestate:
 
-The Module's State
+The Module State
 ==================
 
-An extension may declare a module state which can be used to share data within
-that extension. The previous example uses it to store the ``SpamError``
-exception created at module initialization time. You could then access
-``SpamError`` from any module or type function call by pulling it from the
-module state.
+A module may declare a module state to store any data used by the module.
+In the previous example, the module stored ``SpamError`` in its module state.
+Any function or type within that module can access this module state.
 
-To create a module state, you first need to specify which data it will contain.
-Typically, this will be a ``PyObject *`` but it can contain any data type::
+A C struct defines the layout of the module's state. Typically, it consists of
+``PyObject *`` but it can contain any data type::
 
    typedef struct {
        PyObject *SpamError;
+       int foobar;
    } spam_state;
 
 
-You can then get the state from anywhere in the extension using
-:c:type:`PyModule_GetState` if the module is readily avilable. Otherwise, you
-first need to get the module :c:type:`PyState_FindModule`. To avoid repeating
-this access pattern, you could create the following helper macros::
+From a module function or a type, access the module state through
+:c:type:`PyModule_GetState`. If the module is not available, extract it from
+the thread state through :c:type:`PyState_FindModule`. Use the following macros
+to avoid repeating this pattern::
 
    static struct PyModuleDef spammodule;  /* Forward declare */
    #define spam_state(o) ((spam_state *)PyModule_GetState(o))
    #define spam_state_global ((spam_state *)spam_state(PyState_FindModule(&spammodule)));
 
-To avoid leaking data, you have to implement a set of three extra functions
-which get used by the GC to clean up all the data that has been set in the
-module state::
+Make sure to add the required GC functions to traverse and cleanup the module::
 
    static int
    spammodule_traverse(PyObject m, visitproc visit, void *arg)
@@ -365,9 +364,9 @@ module state::
        spammodule_clear(m);
    }
 
-Finally, update the extension's :c:type:`PyMethodDef` and set the state size as
-well as the traverse, clear, and free functions. Read the next section to see
-the fully initialized ``spammodule``.
+Finally, update the :c:type:`PyModuleDef`. Set the state size, traverse, clear,
+and free functions. Read the next section to see an initialized module
+definition.
 
 
 .. _methodtable:
