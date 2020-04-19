@@ -1962,20 +1962,10 @@ gc_is_immortal_impl(PyObject *module, PyObject *instance)
 static int
 immortalize_object(PyObject *obj, PyObject *Py_UNUSED(ignored))
 {
-    _Py_SetImmortal(obj);
-    /* Special case for PyCodeObjects since they don't have a tp_traverse */
-    if (PyCode_Check(obj)) {
-        PyCodeObject *code = (PyCodeObject *)obj;
-        _Py_SetImmortal(code->co_code);
-        _Py_SetImmortal(code->co_consts);
-        _Py_SetImmortal(code->co_names);
-        _Py_SetImmortal(code->co_varnames);
-        _Py_SetImmortal(code->co_freevars);
-        _Py_SetImmortal(code->co_cellvars);
-        _Py_SetImmortal(code->co_filename);
-        _Py_SetImmortal(code->co_name);
-        _Py_SetImmortal(code->co_lnotab);
+    if (_Py_IsImmortal(obj)) {
+        return 1;
     }
+    _Py_SetImmortal(obj);
     return 0;
 }
 #endif  /* Py_IMMORTAL_OBJECTS */
@@ -2002,16 +1992,17 @@ _PyGC_ImmortalizeHeap(void) {
     PyThreadState *tstate = _PyThreadState_GET();
     GCState *gcstate = &tstate->interp->gc;
 
-    /* Remove any dead objects to avoid immortalizing them */
-    PyGC_Collect();
-
     /* Move all instances into the permanent generation */
     gc_freeze_impl(NULL);
 
     /* Immortalize all instances in the permanent generation */
     list = &gcstate->permanent_generation.head;
     for (gc = GC_NEXT(list); gc != list; gc = GC_NEXT(gc)) {
-        _Py_SetImmortal(FROM_GC(gc));
+        PyObject *obj = FROM_GC(gc);
+        if (_Py_IsImmortal(obj)) {
+          continue;
+        }
+        _Py_SetImmortal(obj);
         /* This can traverse to non-GC-tracked objects, and some of those
          * non-GC-tracked objects (e.g. dicts) can later become GC-tracked, and
          * not be in the permanent generation. So it is possible for immortal
@@ -2327,6 +2318,7 @@ _PyObject_GC_Alloc(int use_calloc, size_t basicsize)
         gcstate->collecting = 1;
         collect_generations(tstate);
         gcstate->collecting = 0;
+        _PyGC_ImmortalizeHeap();
     }
     PyObject *op = FROM_GC(g);
     return op;

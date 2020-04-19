@@ -440,6 +440,21 @@ PyDoc_STRVAR(code_doc,
 \n\
 Create a code object.  Not for the faint of heart.");
 
+static int
+code_traverse(PyCodeObject *code, visitproc visit, void *arg)
+{
+    Py_VISIT(code->co_code);
+    Py_VISIT(code->co_consts);
+    Py_VISIT(code->co_names);
+    Py_VISIT(code->co_varnames);
+    Py_VISIT(code->co_freevars);
+    Py_VISIT(code->co_cellvars);
+    Py_VISIT(code->co_filename);
+    Py_VISIT(code->co_name);
+    Py_VISIT(code->co_lnotab);
+    return 0;
+}
+
 static PyObject *
 code_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 {
@@ -955,7 +970,7 @@ PyTypeObject PyCode_Type = {
     0,                                  /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT,                 /* tp_flags */
     code_doc,                           /* tp_doc */
-    0,                                  /* tp_traverse */
+    (traverseproc)code_traverse,        /* tp_traverse */
     0,                                  /* tp_clear */
     code_richcompare,                   /* tp_richcompare */
     offsetof(PyCodeObject, co_weakreflist),     /* tp_weaklistoffset */

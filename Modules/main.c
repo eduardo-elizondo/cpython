@@ -663,7 +663,7 @@ pymain_main(_PyArgv *args)
     /* Most of the objects alive at this point will stay alive throughout the
      * lifecycle of the runtime. Immortalize to avoid the GC and refcnt costs */
     // TODO(eduardo-elizondo): Fix broekn tests
-    // _PyGC_ImmortalizeHeap();
+    _PyGC_ImmortalizeHeap();
 #endif  /* Py_IMMORTAL_OBJECTS */
     return Py_RunMain();
 }
