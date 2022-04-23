@@ -76,13 +76,6 @@ whose size is determined when the object is allocated.
 /* PyObject_HEAD defines the initial segment of every PyObject. */
 #define PyObject_HEAD                   PyObject ob_base;
 
-#define PyObject_HEAD_INIT(type)        \
-    { _PyObject_EXTRA_INIT              \
-    1, type },
-
-#define PyVarObject_HEAD_INIT(type, size)       \
-    { PyObject_HEAD_INIT(type) size },
-
 /* PyObject_VAR_HEAD defines the initial segment of all variable-size
  * container objects.  These end with a declaration of an array with 1
  * element, but enough space is malloc'ed so that the array actually
@@ -149,12 +142,6 @@ static inline int Py_IS_TYPE(const PyObject *ob, const PyTypeObject *type) {
 #define Py_IS_TYPE(ob, type) Py_IS_TYPE(_PyObject_CAST_CONST(ob), type)
 
 
-static inline void Py_SET_REFCNT(PyObject *ob, Py_ssize_t refcnt) {
-    ob->ob_refcnt = refcnt;
-}
-#define Py_SET_REFCNT(ob, refcnt) Py_SET_REFCNT(_PyObject_CAST(ob), refcnt)
-
-
 static inline void Py_SET_TYPE(PyObject *ob, PyTypeObject *type) {
     ob->ob_type = type;
 }
@@ -193,6 +180,22 @@ static inline void _Py_SetImmortal(PyObject *op)
         op->ob_refcnt = _Py_IMMORTAL_REFCNT;
     }
 }
+
+#define PyObject_HEAD_INIT(type)        \
+    { _PyObject_EXTRA_INIT              \
+    _Py_IMMORTAL_BIT, type },
+
+#define PyVarObject_HEAD_INIT(type, size)       \
+    { PyObject_HEAD_INIT(type) size },
+
+
+static inline void Py_SET_REFCNT(PyObject *ob, Py_ssize_t refcnt) {
+    if (_Py_IsImmortal(ob)) {
+        return;
+    }
+    ob->ob_refcnt = refcnt;
+}
+#define Py_SET_REFCNT(ob, refcnt) Py_SET_REFCNT(_PyObject_CAST(ob), refcnt)
 
 /*
 Type objects contain a string containing the type name (to help somewhat
