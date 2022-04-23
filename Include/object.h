@@ -168,6 +168,33 @@ static inline void Py_SET_SIZE(PyVarObject *ob, Py_ssize_t size) {
 
 
 /*
+Immortalization:
+This marks the reference count bit that will be used to define immortality.
+The GC bit-shifts refcounts left by two, and after that shift it still needs
+to be larger than zero, so it's placed after the first three high bits.
+For backwards compatibility the actual reference count of an immortal instance
+is set to higher than just the immortal bit. This will ensure that the immortal
+bit will remain active, even with extensions compiled without the updated checks
+in Py_INCREF and Py_DECREF. This can be safely changed to a smaller value if
+additional bits are needed in the reference count field.
+*/
+#define _Py_IMMORTAL_BIT_OFFSET (8 * sizeof(Py_ssize_t) - 4)
+#define _Py_IMMORTAL_BIT (1LL << _Py_IMMORTAL_BIT_OFFSET)
+#define _Py_IMMORTAL_REFCNT (_Py_IMMORTAL_BIT + (_Py_IMMORTAL_BIT / 2))
+
+static inline int _Py_IsImmortal(PyObject *op)
+{
+    return (op->ob_refcnt & _Py_IMMORTAL_BIT) != 0;
+}
+
+static inline void _Py_SetImmortal(PyObject *op)
+{
+    if (op) {
+        op->ob_refcnt = _Py_IMMORTAL_REFCNT;
+    }
+}
+
+/*
 Type objects contain a string containing the type name (to help somewhat
 in debugging), the allocation parameters (see PyObject_New() and
 PyObject_NewVar()),
@@ -476,6 +503,9 @@ static inline void Py_INCREF(PyObject *op)
     // Stable ABI for Python 3.10 built in debug mode.
     _Py_IncRef(op);
 #else
+    if (_Py_IsImmortal(op)) {
+        return;
+    }
     // Non-limited C API and limited C API for Python 3.9 and older access
     // directly PyObject.ob_refcnt.
 #ifdef Py_REF_DEBUG
@@ -496,6 +526,9 @@ static inline void Py_DECREF(
     // Stable ABI for Python 3.10 built in debug mode.
     _Py_DecRef(op);
 #else
+    if (_Py_IsImmortal(op)) {
+        return;
+    }
     // Non-limited C API and limited C API for Python 3.9 and older access
     // directly PyObject.ob_refcnt.
 #ifdef Py_REF_DEBUG
