@@ -299,29 +299,51 @@ init_code(PyCodeObject *co, struct _PyCodeConstructor *con)
 
     Py_INCREF(con->filename);
     co->co_filename = con->filename;
+     _Py_SetImmortal(co->co_filename);
+
     Py_INCREF(con->name);
     co->co_name = con->name;
+     _Py_SetImmortal(co->co_name);
+
     Py_INCREF(con->qualname);
     co->co_qualname = con->qualname;
-    co->co_flags = con->flags;
+     _Py_SetImmortal(co->co_qualname);
 
+    co->co_flags = con->flags;
     co->co_firstlineno = con->firstlineno;
+
     Py_INCREF(con->linetable);
     co->co_linetable = con->linetable;
+     _Py_SetImmortal(co->co_linetable);
+
     Py_INCREF(con->endlinetable);
     co->co_endlinetable = con->endlinetable;
+     _Py_SetImmortal(co->co_endlinetable);
+
     Py_INCREF(con->columntable);
     co->co_columntable = con->columntable;
+     _Py_SetImmortal(co->co_columntable);
 
     Py_INCREF(con->consts);
     co->co_consts = con->consts;
+     _Py_SetImmortal(co->co_consts);
+
+     Py_ssize_t tuplesz = PyTuple_Size(co->co_consts);
+     for (Py_ssize_t j = 0; j < tuplesz; j++) {
+         _Py_SetImmortal(PyTuple_GET_ITEM(co->co_consts, j));
+     }
+
     Py_INCREF(con->names);
     co->co_names = con->names;
+     _Py_SetImmortal(co->co_names);
 
     Py_INCREF(con->localsplusnames);
     co->co_localsplusnames = con->localsplusnames;
+     _Py_SetImmortal(co->co_localsplusnames);
+
     Py_INCREF(con->localspluskinds);
     co->co_localspluskinds = con->localspluskinds;
+     _Py_SetImmortal(co->co_localspluskinds);
 
     co->co_argcount = con->argcount;
     co->co_posonlyargcount = con->posonlyargcount;
@@ -331,6 +353,7 @@ init_code(PyCodeObject *co, struct _PyCodeConstructor *con)
 
     Py_INCREF(con->exceptiontable);
     co->co_exceptiontable = con->exceptiontable;
+     _Py_SetImmortal(co->co_exceptiontable);
 
     /* derived values */
     co->co_nlocalsplus = nlocalsplus;
@@ -342,6 +365,8 @@ init_code(PyCodeObject *co, struct _PyCodeConstructor *con)
     /* not set */
     co->co_weakreflist = NULL;
     co->co_extra = NULL;
+
+     _Py_SetImmortal((PyObject *)co);
 
     co->co_warmup = QUICKENING_INITIAL_WARMUP_VALUE;
     memcpy(_PyCode_CODE(co), PyBytes_AS_STRING(con->code),
@@ -1934,3 +1959,4 @@ _PyStaticCode_InternStrings(PyCodeObject *co)
     }
     return 0;
 }
+
