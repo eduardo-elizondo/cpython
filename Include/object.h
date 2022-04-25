@@ -165,9 +165,9 @@ bit will remain active, even with extensions compiled without the updated checks
 in Py_INCREF and Py_DECREF. This can be safely changed to a smaller value if
 additional bits are needed in the reference count field.
 */
-#define _Py_IMMORTAL_BIT_OFFSET (8 * sizeof(Py_ssize_t) - 4)
-#define _Py_IMMORTAL_BIT (1LL << _Py_IMMORTAL_BIT_OFFSET)
-#define _Py_IMMORTAL_REFCNT (_Py_IMMORTAL_BIT + (_Py_IMMORTAL_BIT / 2))
+#define _Py_IMMORTAL_BIT_OFFSET (8 * sizeof(int) - 1)
+#define _Py_IMMORTAL_BIT (1L << _Py_IMMORTAL_BIT_OFFSET)
+#define _Py_IMMORTAL_REFCNT UINT_MAX
 
 static inline int _Py_IsImmortal(PyObject *op)
 {
@@ -506,15 +506,14 @@ static inline void Py_INCREF(PyObject *op)
     // Stable ABI for Python 3.10 built in debug mode.
     _Py_IncRef(op);
 #else
-    if (_Py_IsImmortal(op)) {
+    unsigned int new_refcount;
+    if (__builtin_uadd_overflow((unsigned int)op->ob_refcnt, 1, &new_refcount)) {
         return;
     }
-    // Non-limited C API and limited C API for Python 3.9 and older access
-    // directly PyObject.ob_refcnt.
 #ifdef Py_REF_DEBUG
     _Py_RefTotal++;
 #endif
-    op->ob_refcnt++;
+    op->ob_refcnt = new_refcount;
 #endif
 }
 #define Py_INCREF(op) Py_INCREF(_PyObject_CAST(op))
