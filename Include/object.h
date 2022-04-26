@@ -528,7 +528,7 @@ static inline void Py_DECREF(
     // Stable ABI for Python 3.10 built in debug mode.
     _Py_DecRef(op);
 #else
-    if (_Py_IsImmortal(op)) {
+    if ((int)op->ob_refcnt < 0) {
         return;
     }
     // Non-limited C API and limited C API for Python 3.9 and older access
