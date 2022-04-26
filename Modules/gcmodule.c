@@ -1952,6 +1952,53 @@ gc_get_freeze_count_impl(PyObject *module)
     return gc_list_size(&gcstate->permanent_generation.head);
 }
 
+static int
+immortalize_object(PyObject *obj, PyObject * /* unused */ args)
+{
+    if (_Py_IsImmortal(obj)) {
+        return 0;
+    }
+    _Py_SetImmortal(obj);
+
+    /* Immortalize objects not discoverable through GC  */
+    if (!PyObject_IS_GC(obj) || !_PyObject_GC_IS_TRACKED(obj)) {
+
+        if (Py_TYPE(obj)->tp_traverse == 0) {
+            return 0;
+        }
+
+        /* tp_traverse can not be called for non-heap type object  */
+        if (PyType_Check(obj) && !PyType_HasFeature((PyTypeObject*)(obj), Py_TPFLAGS_HEAPTYPE)) {
+            return 0;
+        }
+
+        Py_TYPE(obj)->tp_traverse(
+              obj, (visitproc)immortalize_object, NULL);
+    }
+    return 0;
+}
+
+PyObject* PyGC_Immortalize_Heap(PyObject *module, PyObject *Py_UNUSED(ignored))
+{
+    PyGC_Head *gc, *list;
+
+    /* Remove any dead objects to avoid immortalizing them */
+    PyGC_Collect();
+
+    /* Move all instances into the permanent generation */
+    gc_freeze_impl(module);
+
+    /* Immortalize all instances in the permanent generation */
+    GCState *gcstate = get_gc_state();
+    list = &gcstate->permanent_generation.head;
+    for (gc = GC_NEXT(list); gc != list; gc = GC_NEXT(gc)) {
+        immortalize_object(FROM_GC(gc), NULL);
+        Py_TYPE(FROM_GC(gc))->tp_traverse(
+              FROM_GC(gc), (visitproc)immortalize_object, NULL);
+    }
+    Py_RETURN_NONE;
+}
+
 
 PyDoc_STRVAR(gc__doc__,
 "This module provides access to the garbage collector for reference cycles.\n"

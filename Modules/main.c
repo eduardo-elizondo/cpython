@@ -698,6 +698,7 @@ pymain_main(_PyArgv *args)
         pymain_exit_error(status);
     }
 
+    PyGC_Immortalize_Heap(NULL, NULL);
     return Py_RunMain();
 }
 

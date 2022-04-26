@@ -156,6 +156,7 @@ PyAPI_FUNC(Py_ssize_t) PyGC_Collect(void);
 PyAPI_FUNC(int) PyGC_Enable(void);
 PyAPI_FUNC(int) PyGC_Disable(void);
 PyAPI_FUNC(int) PyGC_IsEnabled(void);
+PyAPI_FUNC(PyObject *) PyGC_Immortalize_Heap(PyObject *module, PyObject *Py_UNUSED(ignored));
 
 /* Test if a type has a GC head */
 #define PyType_IS_GC(t) PyType_HasFeature((t), Py_TPFLAGS_HAVE_GC)
