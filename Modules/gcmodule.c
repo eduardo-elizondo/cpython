@@ -1952,6 +1952,15 @@ gc_get_freeze_count_impl(PyObject *module)
     return gc_list_size(&gcstate->permanent_generation.head);
 }
 
+PyDoc_STRVAR(gc_immortalize_heap__doc__,
+"immortalize_heap($module, /)\n"
+"--\n"
+"\n"
+"Immortalize all instances accessible through the GC roots.");
+
+#define GC_IMMORTALIZE_HEAP_METHODDEF    \
+    {"immortalize_heap", (PyCFunction)PyGC_Immortalize_Heap, METH_NOARGS, gc_immortalize_heap__doc__},
+
 static int
 immortalize_object(PyObject *obj, PyObject * /* unused */ args)
 {
@@ -2040,6 +2049,7 @@ static PyMethodDef GcMethods[] = {
         gc_get_referrers__doc__},
     {"get_referents",  gc_get_referents, METH_VARARGS,
         gc_get_referents__doc__},
+    GC_IMMORTALIZE_HEAP_METHODDEF
     GC_FREEZE_METHODDEF
     GC_UNFREEZE_METHODDEF
     GC_GET_FREEZE_COUNT_METHODDEF
